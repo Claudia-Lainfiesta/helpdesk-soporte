@@ -1,6 +1,6 @@
 # Base de datos de HelpDesk
 
-Esquema inicial del Sprint 0, PostgreSQL 17 y migraciones SQL sin ORM.
+Esquema de HelpDesk, PostgreSQL 17 y migraciones SQL sin ORM.
 Los archivos en `migrations/` y `seeds/dev.sql` forman parte del repositorio;
 el volumen del contenedor conserva los datos locales de cada desarrollador.
 
@@ -33,7 +33,7 @@ Conserva la carpeta `db/` junto a `dist/` al distribuir el backend.
 
 ```bash
 npm run db:new -- agregar_campo
-# Edita db/migrations/0005_agregar_campo.sql antes de aplicarla.
+# Edita el archivo recién creado antes de aplicarlo; su número depende de los existentes.
 npm run db:migrate
 npm run db:status
 ```
@@ -81,22 +81,35 @@ La operación afecta a toda la base configurada: úsala solo en la base local
 dedicada a HelpDesk. No borra el volumen ni otras bases del contenedor.
 
 El seed es una transacción: inserta cuatro empleados `@helpdesk.local`, cinco
-categorías y un ticket por estado. Usa `ON CONFLICT DO NOTHING`; para tickets
+categorías y seis tickets, uno por estado. Usa `ON CONFLICT DO NOTHING`; para tickets
 también comprueba asunto y solicitante antes de insertar, sin introducir una
 restricción artificial sobre los asuntos de tickets reales. Los ejemplos
 existentes no se sobrescriben. Las secuencias pueden tener saltos al repetir
 inserciones con conflicto; las referencias no pretenden ser consecutivas.
 
+Después del SQL, el seed asigna hashes Argon2id a los cuatro empleados que
+todavía no tienen contraseña, con `must_change_password = false`. Usa
+`SEED_DEV_PASSWORD` o, si está vacía, genera una contraseña aleatoria local en
+`.seed-dev-password` (permisos 600, excluido de Git). No imprime ese valor ni
+restablece contraseñas existentes. Consulta [la guía de autenticación](../docs/auth.md).
+
 ## Decisiones del esquema
 
 - `users` y `tickets` usan IDs bigint identity; los catálogos fijos `roles` y
   `ticket_statuses` usan smallint. `categories` usa bigint porque es configurable.
-- Cada usuario tiene exactamente un `role_id` obligatorio. No hay `user_roles`
-  ni contraseña. Los correos y nombres de categorías son únicos con índices
+- Cada usuario tiene exactamente un `role_id` obligatorio. No hay `user_roles`.
+  Los correos y nombres de categorías son únicos con índices
   sobre `lower(...)`, sin extensiones.
-- Los IDs del catálogo de estados son explícitos y estables: 1 creado,
-  2 en_proceso, 3 en_espera, 4 resuelto y 5 cerrado. Solo cerrado es final.
-  El valor predeterminado de `tickets.status_id` es 1.
+- `0007_auth_sessions.sql` añade el hash de contraseña y los campos de acceso
+  a `users`. Un `password_hash` nulo impide iniciar sesión; `expires_at` nulo
+  indica una cuenta sin vencimiento. Las sesiones guardan únicamente el SHA-256
+  del token opaco, con límite absoluto, última actividad y revocación. La cuenta
+  activa y su vencimiento se comprueban en cada petición autenticada.
+- Los cinco estados originales conservan sus IDs: 1 creado, 2 en_proceso,
+  3 en_espera, 4 resuelto y 5 cerrado. Cancelado se incorpora mediante una
+  migración nueva, con ID generado por identity y `sort_order = 6`.
+  Identifica los estados por `code`; el valor predeterminado de
+  `tickets.status_id` sigue siendo 1 (creado).
 - `reference` es una columna generada almacenada y única: `TK-000001`,
   `TK-999999`, `TK-1000000`. Los números largos se conservan completos.
 - `category_id`, `requester_id` y `status_id` son obligatorios;
@@ -111,11 +124,33 @@ inserciones con conflicto; las referencias no pretenden ser consecutivas.
 - Las fechas son timestamptz; PostgreSQL conserva instantes y su presentación
   depende de la zona de la sesión. El ejecutor SQL usa UTC.
 
+## Estados de tickets
+
+| Orden | Código       | Nombre     | `is_final` |
+| ----- | ------------ | ---------- | ---------- |
+| 1     | `creado`     | Creado     | false      |
+| 2     | `en_proceso` | En proceso | false      |
+| 3     | `en_espera`  | En espera  | false      |
+| 4     | `resuelto`   | Resuelto   | false      |
+| 5     | `cerrado`    | Cerrado    | true       |
+| 6     | `cancelado`  | Cancelado  | true       |
+
+Cerrado significa que el problema se resolvió con éxito y el usuario confirmó
+el cierre. Cancelado significa que se decidió no continuar, por ejemplo porque
+el ticket se registró por error. Solo el supervisor podrá cancelar; esa regla
+se implementará en la aplicación, sin restricciones de rol ni transiciones en
+la base de datos.
+
+El ejemplo cancelado conserva un agente asignado, pero `resolved_at` y
+`closed_at` quedan en NULL: cancelar no representa una resolución exitosa ni
+un cierre confirmado. No se agregan columnas ni triggers de negocio.
+
 ## Diagrama ER
 
 ```mermaid
 erDiagram
     roles ||--o{ users : role_id
+    users ||--o{ sessions : user_id
     users ||--o{ tickets : requester_id
     users o|--o{ tickets : assigned_agent_id
     categories ||--o{ tickets : category_id
@@ -133,8 +168,26 @@ erDiagram
         text email "UNIQUE lower(email)"
         smallint role_id FK
         boolean is_active
+        text password_hash "Nullable; Argon2id"
+        boolean must_change_password
+        int failed_login_attempts
+        timestamptz locked_until "Nullable"
+        timestamptz last_login_at "Nullable"
+        timestamptz password_changed_at "Nullable"
+        timestamptz expires_at "Nullable; vence la cuenta"
         timestamptz created_at
         timestamptz updated_at
+    }
+    sessions {
+        uuid id PK
+        bigint user_id FK
+        text token_hash UK "SHA-256; nunca el token"
+        timestamptz created_at
+        timestamptz last_seen_at
+        timestamptz expires_at "Límite absoluto"
+        timestamptz revoked_at "Nullable"
+        inet ip "Nullable"
+        text user_agent "Nullable"
     }
     categories {
         bigint id PK
@@ -146,11 +199,11 @@ erDiagram
     }
     ticket_statuses {
         smallint id PK
-        text code UK
+        text code UK "creado, en_proceso, en_espera, resuelto, cerrado, cancelado"
         text name
         text description
         smallint sort_order
-        boolean is_final
+        boolean is_final "true: cerrado y cancelado"
     }
     tickets {
         bigint id PK

@@ -1,26 +1,24 @@
 # HelpDesk: Sprint Backlog (MVP)
 
-Fuente: `Requerimientos/UserStoryMapping.md`, `Requerimientos/Epics.md` y la página de planificación (`Planificacion/epicas_hu_backlog_page/plan.js`). El MVP son 20 de las 98 historias, repartidas en seis sprints (S01 a S06) y un Sprint 0 preparatorio.
+Fuente: `Requerimientos/UserStoryMapping.md` y `Requerimientos/Epics.md`. El MVP son 20 de las 98 historias. Sprints de 2 semanas; las fechas reales se fijan cuando el equipo confirme su disponibilidad.
 
-**Estado de cada ítem:** Por hacer / En curso / Hecho. **Responsables:** A (backend y base de datos), B (interfaz) y C (pruebas).
+**Estado de cada ítem:** Por hacer / En curso / Hecho. Responsable: por asignar.
 
-## S00 · Cimientos
+## Sprint 0: Cimientos (Semanas 1 y 2)
 
-**Objetivo:** dejar lista la arquitectura, el entorno, las herramientas y los acuerdos para que los tres integrantes puedan trabajar e integrar sus cambios. Sin historias de usuario.
+**Objetivo:** dejar listo el entorno y las decisiones para empezar a construir. Sin historias de usuario.
 
 | # | Tarea | Responsable | Estado |
 |---|---|---|---|
-| S0-01 | Confirmar tecnologías, arquitectura y despliegue (plataforma web acordada) | A + B | Por hacer |
-| S0-02 | Organizar repositorio, ramas y revisiones | Los tres | Por hacer |
-| S0-03 | Preparar un entorno reproducible para el equipo | C | Por hacer |
-| S0-04 | Provisionar PostgreSQL y comprobar el esquema | A | Por hacer |
-| S0-05 | Preparar hosting de pruebas e integración continua | A + C | En curso |
-| S0-06 | Configurar y validar el bot Telegram de pruebas | C | En curso |
-| S0-07 | Diseñar prototipos de los flujos del MVP | B | Por hacer |
-| S0-08 | Revisar acuerdos de producto y pendientes | Los tres | Hecho |
-| S0-09 | Revisar ubicación del repositorio y documentación | B + C | Por hacer |
-
-S0-05 y S0-06 siguen en curso: falta comprobar la ejecución de CI y probar el relevo de Telegram con dos cuentas reales.
+| S0-01 | Definir stack tecnológico y forma de despliegue (plataforma web acordada) | | Por hacer |
+| S0-02 | Crear estructura del repositorio, ramas y flujo de trabajo del equipo (revisión de cambios) | | Por hacer |
+| S0-03 | Preparar entorno de desarrollo local reproducible para todo el equipo | | Por hacer |
+| S0-04 | Provisionar base de datos y esquema inicial de usuarios, roles y tickets | | Por hacer |
+| S0-05 | Preparar hosting de pruebas y pipeline de integración continua | | Por hacer |
+| S0-06 | Crear el bot de Telegram de pruebas y confirmar que permite la conversación en ambos sentidos | | Por hacer |
+| S0-07 | Diseñar prototipo de pantallas de los flujos del MVP | | Por hacer |
+| S0-08 | Cerrar con el cliente las decisiones pendientes (ver abajo) | | Hecho |
+| S0-09 | Mover el repositorio fuera de iCloud Drive y limpiar los residuos de documentación | | Por hacer |
 
 **Decisiones del cliente cerradas el 29-oct-2026:**
 
@@ -32,75 +30,65 @@ S0-05 y S0-06 siguen en curso: falta comprobar la ejecución de CI y probar el r
 
 Los acuerdos y las consideraciones todavía pendientes están en [Decisiones-de-producto.md](../Decisiones-de-producto.md).
 
-## S01 · Base y acceso
+## Sprint 1: Cuentas y acceso (Semanas 3 y 4)
 
-**Objetivo:** Integrar el acceso, los permisos y la administración básica sobre el código existente.
+**Objetivo:** Que cada persona entre al sistema con su rol.
 
-| ID | Épica | Historia | Responsable | Estado |
+| ID | Épica | Historia | Rol | Estado |
 |---|---|---|---|---|
-| HU-10-01 | EP-10 | Proteger el acceso y las sesiones del HelpDesk | A | Por hacer |
-| HU-05-03 | EP-05 | Entrar al HelpDesk y cerrar la sesión | B | Por hacer |
-| HU-05-01 | EP-05 | Habilitar una cuenta para un usuario | A | Por hacer |
-| HU-05-05 | EP-05 | Asignar y ajustar roles según la responsabilidad del usuario | A | Por hacer |
-| HU-05-07 | EP-05 | Acceder únicamente a las funciones y datos autorizados | C | Por hacer |
-| HU-09-01 | EP-09 | Mantener categorías y opciones de clasificación | B | Por hacer |
+| HU-05-01 | EP-05 | Habilitar una cuenta para un usuario | Administrador | Por hacer |
+| HU-05-03 | EP-05 | Entrar al HelpDesk y cerrar la sesión | Todos | Por hacer |
+| HU-05-05 | EP-05 | Asignar y ajustar roles | Administrador | Por hacer |
+| HU-05-07 | EP-05 | Acceder únicamente a las funciones y datos autorizados | Todos | Por hacer |
+| HU-10-01 | EP-10 | Proteger el acceso y las sesiones | Administrador | Por hacer |
+| HU-09-01 | EP-09 | Mantener categorías de clasificación | Administrador | Por hacer |
 
-## S02 · Portal e identidad Telegram
+## Sprint 2: Solicitudes y asignación (Semanas 5 y 6)
 
-**Objetivo:** Registrar y consultar solicitudes, mientras se prepara una identidad Telegram verificable.
+**Objetivo:** Que un ticket se registre y llegue a un agente.
 
-| ID | Épica | Historia | Responsable | Estado |
+| ID | Épica | Historia | Rol | Estado |
 |---|---|---|---|---|
-| HU-01-01 | EP-01 | Registrar una solicitud de soporte | A | Por hacer |
-| HU-01-03 | EP-01 | Consultar mis solicitudes | B | Por hacer |
-| HU-01-05 | EP-01 | Consultar el detalle y la responsabilidad de atención | B | Por hacer |
-| HU-05-09 | EP-05 | Vincular una identidad de Telegram de forma verificable | C | Por hacer |
+| HU-01-01 | EP-01 | Registrar una solicitud de soporte | Solicitante | Por hacer |
+| HU-01-03 | EP-01 | Consultar mis solicitudes | Solicitante | Por hacer |
+| HU-01-05 | EP-01 | Consultar el detalle y el responsable de atención | Solicitante | Por hacer |
+| HU-03-02 | EP-03 | Identificar solicitudes que necesitan asignación | Supervisor | Por hacer |
+| HU-03-03 | EP-03 | Asignar un ticket al equipo y agente adecuados | Supervisor | Por hacer |
 
-## S03 · Asignación y atención
+## Sprint 3: Atención y cierre (Semanas 7 y 8)
 
-**Objetivo:** Asignar cada caso y registrar sus estados y actividades.
+**Objetivo:** Que el ticket se atienda, se resuelva y se cierre.
 
-| ID | Épica | Historia | Responsable | Estado |
+| ID | Épica | Historia | Rol | Estado |
 |---|---|---|---|---|
-| HU-03-02 | EP-03 | Identificar solicitudes que todavía necesitan asignación | B | Por hacer |
-| HU-03-03 | EP-03 | Asignar un ticket al equipo y agente adecuados | A | Por hacer |
-| HU-02-01 | EP-02 | Actualizar el estado de un ticket | A | Por hacer |
-| HU-02-02 | EP-02 | Registrar el trabajo realizado en una solicitud | B | Por hacer |
+| HU-02-01 | EP-02 | Actualizar el estado de un ticket | Agente | Por hacer |
+| HU-02-02 | EP-02 | Registrar el trabajo realizado | Agente | Por hacer |
+| HU-02-05 | EP-02 | Documentar la solución y resolver el ticket | Agente | Por hacer |
+| HU-02-06 | EP-02 | Cerrar un ticket cuando termina su atención | Agente | Por hacer |
+| HU-01-08 | EP-01 | Consultar la solución de una solicitud | Solicitante | Por hacer |
 
-## S04 · Resolución y tiempos
+## Sprint 4: Prioridad y Telegram (Semanas 9 y 10)
 
-**Objetivo:** Completar solución y cierre, y presentar prioridades y vencimientos.
+**Objetivo:** Que haya fechas límite y avisos por Telegram.
 
-| ID | Épica | Historia | Responsable | Estado |
+| ID | Épica | Historia | Rol | Estado |
 |---|---|---|---|---|
-| HU-02-05 | EP-02 | Documentar la solución y resolver el ticket | A | Por hacer |
-| HU-02-06 | EP-02 | Cerrar un ticket cuando termina su atención | C | Por hacer |
-| HU-01-08 | EP-01 | Consultar la solución de una solicitud | B | Por hacer |
-| HU-04-01 | EP-04 | Determinar la prioridad de una solicitud | A | Por hacer |
-| HU-04-03 | EP-04 | Conocer las fechas límite de atención | A | Por hacer |
+| HU-04-01 | EP-04 | Determinar la prioridad de una solicitud | Supervisor | Por hacer |
+| HU-04-03 | EP-04 | Conocer las fechas límite de atención | Agente | Por hacer |
+| HU-05-09 | EP-05 | Vincular una identidad de Telegram | Solicitante | Por hacer |
+| HU-06-08 | EP-06 | Recibir avisos en la aplicación y en Telegram | Todos | Por hacer |
 
-Nota: los tiempos de SLA usan valores fijos de ejemplo en el MVP; su configuración completa (EP-09) queda para después. HU-04-04 ya no depende de Telegram, sino del historial de estados de HU-02-01 y HU-02-09. HU-02-01 y HU-02-02 están en S03 e incluyen el registro de cambios; HU-02-09 y HU-04-04 no tienen sprint asignado en este MVP. Hay que revisar esa cobertura antes de planificar HU-04-04; no se movieron ni agregaron historias a los sprints.
+Nota: los tiempos de SLA usan valores fijos de ejemplo en el MVP; su configuración completa (EP-09) queda para después. HU-04-04 ya no depende de Telegram, sino del historial de estados de HU-02-01 y HU-02-09. HU-02-01 y HU-02-02 están en Sprint 3 e incluyen el registro de cambios; HU-02-09 y HU-04-04 no tienen sprint asignado en este MVP. Hay que revisar esa cobertura antes de planificar HU-04-04; no se movieron ni agregaron historias a los sprints.
 
-## S05 · Avisos e integración
+## Sprint 5: Pruebas y entrega (Semanas 11 y 12)
 
-**Objetivo:** Conectar los eventos relevantes con avisos en aplicación y Telegram.
-
-| ID | Épica | Historia | Responsable | Estado |
-|---|---|---|---|---|
-| HU-06-08 | EP-06 | Recibir los avisos relevantes en la aplicación y en Telegram | C | Por hacer |
+**Objetivo:** corregir, probar con usuarios reales y presentar el MVP.
 
 | # | Tarea | Responsable | Estado |
 |---|---|---|---|
-| S05-01 | Integración transversal y recorrido completo | A + B + C | Por hacer |
-
-## S06 · Validación y entrega
-
-**Objetivo:** Cerrar defectos, documentar y ensayar. No iniciar nuevas historias.
-
-
-| # | Tarea | Responsable | Estado |
-|---|---|---|---|
-| S06-01 | Regresión, correcciones y preparación de entrega | A + B + C | Por hacer |
+| S5-01 | Pruebas del recorrido completo del ticket | | Por hacer |
+| S5-02 | Ajustes según la opinión del cliente | | Por hacer |
+| S5-03 | Documentación de uso | | Por hacer |
 
 ## Fuera del MVP (Product Backlog restante)
 
