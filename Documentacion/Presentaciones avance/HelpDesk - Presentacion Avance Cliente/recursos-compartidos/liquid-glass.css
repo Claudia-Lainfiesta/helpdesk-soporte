@@ -1,0 +1,100 @@
+/* Acabado óptico compartido: conserva la paleta y la geometría del contenido. */
+:root {
+  --glass-fill: linear-gradient(145deg, #ffffffb8 0%, #ffffff55 50%, #d9e7ff66 100%);
+  --glass-edge: #ffffffd9;
+  --glass-shadow: inset 0 1px 1px #fff, inset 0 -1px 1px #164fb322,
+    0 0 0 1px #164fb310, 0 12px 32px #09285f14;
+}
+.slide-footer { justify-content: flex-end; }
+.slide:not(.cover) {
+  background: radial-gradient(ellipse at 8% 85%, #164fb326, transparent 55%),
+    radial-gradient(ellipse at 95% 12%, #bf203920, transparent 48%),
+    radial-gradient(ellipse at 45% 0%, #ffffff, transparent 60%),
+    linear-gradient(135deg, #f0f5ff, #e9f0fc);
+}
+.card, .arch-node, .entity, .state, .side-integration, table {
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+  backdrop-filter: blur(18px) saturate(1.35);
+  -webkit-backdrop-filter: blur(18px) saturate(1.35);
+  border-radius: 22px;
+}
+.card, .arch-node, .entity, .cover-ticket { position: relative; }
+.card::before, .arch-node::before, .entity::before, .cover-ticket::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(125deg, #ffffff42, transparent 32%, transparent 68%, #ffffff1a);
+  border-top: 1px solid #ffffffba;
+}
+.blue-card, .primary {
+  background: linear-gradient(135deg, #09285ff2, #164fb3e0)!important;
+  box-shadow: inset 0 1px 1px #ffffff66, inset 0 -1px 2px #061b4a66, 0 12px 30px #09285f26;
+}
+.cover-ticket {
+  background: linear-gradient(145deg, #ffffff30, #ffffff0a 52%, #a9caff24);
+  border: 1px solid #ffffff66;
+  backdrop-filter: blur(24px) saturate(1.5);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  box-shadow: inset 0 1px 2px #ffffff80, inset 0 -1px 2px #ffffff20, 0 20px 45px #03152e30;
+  border-radius: 28px;
+}
+.state.blue { background: linear-gradient(145deg, #edf4ffb8, #c5d9ff88); }
+.state.dark { background: linear-gradient(135deg,#09285ff2,#164fb3e0); }
+.note { background: linear-gradient(110deg,#ffffff8c,#ffffff33); box-shadow: inset 0 1px #ffffffb0; }
+.topbar, .controls, .resource-menu {
+  background: linear-gradient(120deg, #071a3cdb, #0b327ec9);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow: inset 0 1px #ffffff22, 0 6px 28px #020f2620;
+}
+.topbar { position: relative; z-index: 15; }
+button, a.control, select {
+  border-radius: 16px;
+  background: linear-gradient(145deg,#ffffff24,#ffffff0a);
+  border-color: #ffffff47;
+  box-shadow: inset 0 1px #ffffff40, inset 0 -1px #00113230, 0 4px 12px #020f2617;
+  transition: background .2s, box-shadow .2s, opacity .2s;
+}
+button:hover, a.control:hover { background: linear-gradient(145deg,#ffffff38,#ffffff16); box-shadow: inset 0 1px #ffffff75,0 6px 16px #020f2626; }
+.tools .download { background: linear-gradient(145deg,#ed526bd9,#bf2039f5); }
+.resource-menu { border-radius: 22px; background-color: #09285fe6; }
+/* Las barras flotan sobre la diapositiva: no reservan altura ni reducen la escala. */
+@media screen {
+  :fullscreen .stage { height: 100dvh; min-height: 0; padding: 0; }
+  :fullscreen .slide { box-shadow: none; }
+  :fullscreen .topbar, :fullscreen .controls {
+    position: fixed; left: 0; right: 0; z-index: 30;
+    opacity: 0; transition: opacity .22s ease;
+  }
+  :fullscreen .topbar { top: 0; }
+  :fullscreen .controls { bottom: 0; }
+  :fullscreen .topbar:hover, :fullscreen .controls:hover,
+  :fullscreen .topbar:has(:focus-visible), :fullscreen .controls:has(:focus-visible),
+  :fullscreen body:has(#resource-menu:not([hidden])) .topbar { opacity: 1; }
+  :fullscreen .resource-menu { position: fixed; z-index: 40; }
+  /* Un toque sobre el borde revela los controles en dispositivos sin cursor. */
+  @media (hover: none) {
+    :fullscreen .topbar:focus-within, :fullscreen .controls:focus-within { opacity: 1; }
+  }
+}
+/* PDF: elimina las capas de desenfoque y sombras que encarecen el renderizado.
+   Mantiene texto vectorial, colores, bordes y reflejos del acabado de vidrio. */
+@media print {
+  *, *::before, *::after {
+    backdrop-filter: none!important; -webkit-backdrop-filter: none!important;
+    box-shadow: none!important; text-shadow: none!important;
+  }
+  .slide { background: #eef3fc url('./fondo-claro.jpg') center/100% 100%!important; }
+  .slide.cover { background: #09285f url('./fondo-portada.jpg') center/100% 100%!important; }
+  .slide::after { display: none; }
+  /* Superficies opacas equivalentes: evitan máscaras de transparencia de alta
+     resolución que Chromium genera para cada tarjeta y celda del PDF. */
+  .card, .arch-node, .entity, .state, .side-integration, table { background: #f4f7fd!important; }
+  .card::before, .arch-node::before, .entity::before, .cover-ticket::before { display: none; }
+  .blue-card, .primary, .state.dark { background: #123e87!important; }
+  .state.blue { background: #e0eaff!important; }
+  .cover-ticket { background: #245092!important; }
+  .note { background: #eaf0fa!important; }
+  tbody tr:nth-child(even) { background: #edf2fb; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none!important; } }
