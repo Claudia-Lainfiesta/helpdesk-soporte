@@ -1,0 +1,258 @@
+<a
+  routerLink="/tickets"
+  class="mb-6 inline-block rounded-boton font-semibold text-primario underline"
+  >Volver a Tickets</a
+>
+@if (cargando()) {
+  <p role="status" class="py-10 text-texto-suave">Cargando ticket…</p>
+} @else if (error()) {
+  <app-alerta variante="peligro">{{ error() }}</app-alerta>
+  @if (!noEncontrado()) {
+    <app-boton variante="secundario" (accion)="recargar.next()">Reintentar</app-boton>
+  }
+} @else if (ticket(); as t) {
+  <section [attr.aria-label]="t.number">
+    <div class="mb-6 flex flex-wrap items-center gap-4">
+      <h1>{{ t.number }}</h1>
+      <app-insignia-estado [codigo]="t.status" />
+      <span class="inline-flex items-center gap-2"
+        ><span class="text-texto-suave">Prioridad:</span
+        ><app-insignia-prioridad [prioridad]="t.priority"
+      /></span>
+    </div>
+    <app-tarjeta
+      ><div class="space-y-6 p-5 sm:p-7">
+        <h2 class="break-words text-xl font-bold text-primario">{{ t.subject }}</h2>
+        <dl class="grid gap-5 break-words sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <dt class="font-semibold text-texto-suave">Categoría</dt>
+            <dd>{{ t.category.name }}</dd>
+          </div>
+          <div>
+            <dt class="font-semibold text-texto-suave">Solicitante</dt>
+            <dd>
+              {{ t.requester.fullName
+              }}<span class="block text-sm text-texto-suave">{{ t.requester.email }}</span>
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold text-texto-suave">Agente</dt>
+            <dd>{{ t.assignedAgent?.fullName || 'Sin asignar' }}</dd>
+          </div>
+          <div>
+            <dt class="font-semibold text-texto-suave">Creación</dt>
+            <dd>{{ t.createdAt | fechaLocal }}</dd>
+          </div>
+        </dl>
+        <div class="border-t border-linea pt-5">
+          <h3 class="mb-3 font-semibold">Descripción</h3>
+          <p class="whitespace-pre-wrap break-words leading-relaxed">{{ t.description }}</p>
+        </div>
+      </div></app-tarjeta
+    >
+
+    @if (t.attachment) {
+      <app-imagen-adjunta [ticketId]="t.id" [numero]="t.number" />
+    }
+    @if (permisos().telegramVisible) {
+      <app-tarjeta class="mt-6 block">
+        <section class="space-y-4 p-5 sm:p-7" aria-labelledby="contacto-ticket">
+          <h2 id="contacto-ticket" class="text-xl font-bold text-primario">
+            Contacto con el agente
+          </h2>
+          <p class="text-texto-suave">
+            La conversación ocurre directamente en Telegram. HelpDesk no recibe ni guarda esos
+            mensajes.
+          </p>
+          <app-boton icono="telegram" [cargando]="cargandoContacto()" (accion)="hablarPorTelegram()"
+            >Hablar por Telegram</app-boton
+          >
+          @if (avisoContacto()) {
+            <app-alerta variante="info">{{ avisoContacto() }}</app-alerta>
+          }
+          @if (avisoContacto() && t.assignedAgent) {
+            <app-boton variante="secundario" (accion)="cargarContacto()"
+              >Actualizar contacto</app-boton
+            >
+          }
+        </section>
+      </app-tarjeta>
+    }
+    @if (permisos().asignacion !== 'ninguna') {
+      <app-tarjeta class="mt-6 block"
+        ><section class="space-y-4 p-5 sm:p-7" aria-labelledby="asignacion-ticket">
+          <h2 id="asignacion-ticket" class="text-xl font-bold text-primario">Asignación</h2>
+          @if (permisos().asignacion === 'propia') {
+            <app-boton [cargando]="ocupada()" (accion)="asignarme()">Asignarme</app-boton>
+          }
+          @if (permisos().asignacion === 'gestionar') {
+            @if (errorAgentes()) {
+              <app-alerta variante="peligro">{{ errorAgentes() }}</app-alerta
+              ><app-boton variante="secundario" (accion)="cargarAgentes()"
+                >Reintentar agentes</app-boton
+              >
+            }
+            @if (cargandoAgentes()) {
+              <p role="status">Cargando agentes…</p>
+            }
+            <div class="flex flex-wrap items-end gap-3">
+              <app-selector
+                class="w-full min-w-0 sm:w-64"
+                identificador="agente-ticket"
+                etiqueta="Agente asignado"
+                [formControl]="agente"
+                [opciones]="opcionesAgentes()"
+              />
+              <app-boton
+                [cargando]="ocupada()"
+                [deshabilitado]="
+                  cargandoAgentes() ||
+                  !!errorAgentes() ||
+                  agente.value === (t.assignedAgent?.id || '')
+                "
+                (accion)="guardarAsignacion()"
+                >Guardar asignación</app-boton
+              >
+            </div>
+          }
+        </section></app-tarjeta
+      >
+    }
+    @if (permisos().prioridadEditable) {
+      <app-tarjeta class="mt-6 block"
+        ><section class="space-y-4 p-5 sm:p-7" aria-labelledby="prioridad-ticket">
+          <h2 id="prioridad-ticket" class="text-xl font-bold text-primario">Prioridad</h2>
+          <div class="flex flex-wrap items-end gap-3">
+            <app-selector
+              class="w-full min-w-0 sm:w-48"
+              identificador="prioridad-ticket-selector"
+              etiqueta="Nueva prioridad"
+              [formControl]="prioridad"
+              [opciones]="opcionesPrioridad"
+            />
+            <app-boton
+              [cargando]="ocupada()"
+              [deshabilitado]="prioridad.value === t.priority"
+              (accion)="guardarPrioridad()"
+              >Cambiar prioridad</app-boton
+            >
+          </div>
+        </section></app-tarjeta
+      >
+    }
+    @if (errorAccion()) {
+      <app-alerta class="mt-5 block" variante="peligro">{{ errorAccion() }}</app-alerta>
+    }
+    @if (permisos().acciones.length) {
+      <app-tarjeta class="mt-6 block"
+        ><section class="p-5 sm:p-7" aria-labelledby="acciones-ticket">
+          <h2 id="acciones-ticket" class="mb-4 text-xl font-bold text-primario">Acciones</h2>
+          <div class="flex flex-wrap gap-3">
+            @for (accion of permisos().acciones; track accion) {
+              <app-boton
+                [variante]="accion === 'cancel' ? 'peligro' : 'primario'"
+                [deshabilitado]="ocupada()"
+                (accion)="actuar(accion)"
+                >{{ etiquetaAccion(accion) }}</app-boton
+              >
+            }
+          </div>
+        </section></app-tarjeta
+      >
+    }
+    <app-tarjeta class="mt-6 block"
+      ><section class="p-5 sm:p-7" aria-labelledby="actividad-ticket">
+        <h2 id="actividad-ticket" class="mb-5 text-xl font-bold text-primario">Actividad</h2>
+        @if (permisos().seguimientoEditable) {
+          <form class="mb-7 space-y-4" [formGroup]="formularioNota" (ngSubmit)="agregarNota()">
+            <app-area-texto
+              identificador="nota-interna"
+              etiqueta="Agregar nota interna"
+              [formControl]="nota"
+              [maximo]="5000"
+              marcador="Resume aquí la información relevante del seguimiento realizado."
+              ayuda="Las notas internas solo son visibles para el personal de soporte autorizado."
+              [error]="
+                nota.touched && nota.invalid
+                  ? 'Escribe entre 1 y 5000 caracteres, sin contar espacios en los extremos.'
+                  : ''
+              "
+            />
+            @if (errorNota()) {
+              <app-alerta variante="peligro">{{ errorNota() }}</app-alerta>
+            }
+            <app-boton tipo="submit" [cargando]="guardandoNota()" [deshabilitado]="ocupada()"
+              >Agregar nota</app-boton
+            >
+          </form>
+        } @else if (permisos().notasVisibles) {
+          <p class="mb-5 text-sm text-texto-suave">
+            Este ticket está {{ t.status === 'cancelado' ? 'cancelado' : 'cerrado' }} y sus notas
+            son de solo lectura.
+          </p>
+        }
+        @if (cargandoActividad()) {
+          <p role="status">Cargando actividad…</p>
+        } @else if (errorActividad()) {
+          <app-alerta variante="peligro">{{ errorActividad() }}</app-alerta
+          ><app-boton variante="secundario" (accion)="cargarActividad()"
+            >Reintentar actividad</app-boton
+          >
+        } @else {
+          <ol class="space-y-5 border-l border-linea pl-5">
+            @for (evento of actividad(); track evento.id) {
+              <li>
+                @if (evento.type === 'note_added' && evento.note && permisos().notasVisibles) {
+                  <div class="rounded-tarjeta border border-linea bg-superficie-suave p-4">
+                    <p class="font-semibold text-primario">{{ evento.actor.fullName }}</p>
+                    <p class="mb-3 text-sm text-texto-suave">
+                      Nota interna ·
+                      <time [attr.datetime]="evento.createdAt">{{
+                        evento.createdAt | fechaLocal
+                      }}</time>
+                    </p>
+                    <p class="whitespace-pre-wrap break-words">{{ evento.note.body }}</p>
+                  </div>
+                } @else if (evento.type !== 'note_added') {
+                  <p class="font-medium">{{ textoEvento(evento) }}</p>
+                  <time class="text-sm text-texto-suave" [attr.datetime]="evento.createdAt">{{
+                    evento.createdAt | fechaLocal
+                  }}</time>
+                }
+              </li>
+            } @empty {
+              <li>No hay actividad registrada.</li>
+            }
+          </ol>
+        }
+        @if (!errorActividad()) {
+          <app-paginador
+            [pagina]="paginaEventos()"
+            [tamano]="tamanoEventos()"
+            [total]="totalEventos()"
+            [cargando]="cargandoActividad()"
+            [opcionesTamanos]="[20, 50, 100]"
+            (cambiarPagina)="cargarActividad($event)"
+            (seleccionarTamano)="tamanoActividad($event)"
+          />
+        }
+        <p class="mt-4 text-xs text-texto-suave">
+          En tickets anteriores al historial, solo se recuperó su creación. Los cambios se registran
+          desde la incorporación de esta función.
+        </p>
+      </section></app-tarjeta
+    >
+  </section>
+}
+<app-aviso-flotante />
+@if (pendiente(); as p) {
+  <app-confirmacion
+    [titulo]="p.titulo"
+    [mensaje]="p.mensaje"
+    [etiqueta]="p.titulo"
+    [peligro]="p.accion === 'cancel'"
+    [cargando]="ocupada()"
+    (confirmar)="confirmar()"
+    (cancelar)="pendiente.set(null)"
+  />
+}

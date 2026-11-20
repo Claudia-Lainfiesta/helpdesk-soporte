@@ -8,9 +8,8 @@ import { errorAdministracion } from '../../core/administracion/errores';
 import { Boton } from '../../shared/ui/boton';
 import { Interruptor } from '../../shared/ui/interruptor';
 import { TablaPaginada } from '../../shared/ui/tabla-paginada';
-import { Tarjeta } from '../../shared/ui/tarjeta';
 import { InsigniaCuenta } from '../../shared/ui/insignia-cuenta';
-import { MenuAcciones } from '../../shared/ui/menu-acciones';
+import { AccionesFila } from '../../shared/ui/acciones-fila';
 import { Confirmacion } from '../../shared/ui/confirmacion';
 import { Avisos, AvisoFlotante } from '../../shared/ui/aviso-flotante';
 import { FormularioCategoria } from './formulario-categoria';
@@ -23,9 +22,8 @@ import { FormularioCategoria } from './formulario-categoria';
     Boton,
     Interruptor,
     TablaPaginada,
-    Tarjeta,
     InsigniaCuenta,
-    MenuAcciones,
+    AccionesFila,
     Confirmacion,
     AvisoFlotante,
     FormularioCategoria,
@@ -49,38 +47,40 @@ import { FormularioCategoria } from './formulario-categoria';
       nombre="categorías"
       [columnas]="['Nombre', 'Descripción', 'Estado', 'Acciones']"
       [rejilla]="rejilla"
-      [anchoMinimo]="760"
       [cargando]="cargando()"
       [error]="error()"
       [vacia]="!categorias().length"
       (reintentar)="recargar.next()"
     >
       @for (categoria of categorias(); track categoria.id) {
-        <app-tarjeta
-          role="row"
-          class="grid items-center gap-4 px-5 py-4"
-          [style.grid-template-columns]="rejilla"
-          ><div role="cell" class="font-semibold text-texto">{{ categoria.name }}</div>
-          <div role="cell" class="break-words text-texto-suave">
+        <div role="row" class="fila-responsive grid">
+          <div role="cell" class="campo-principal font-semibold text-texto">
+            {{ categoria.name }}
+          </div>
+          <div role="cell" class="campo-principal break-words text-texto-suave">
+            <span class="etiqueta-celda">Descripción</span>
             {{ categoria.description || 'Sin descripción' }}
           </div>
           <div role="cell">
+            <span class="etiqueta-celda">Estado</span>
             <app-insignia-cuenta [tipo]="categoria.isActive ? 'Activa' : 'Inactiva'" />
           </div>
           <div role="cell">
-            <app-menu-acciones
-              [nombre]="categoria.name"
+            <app-acciones-fila
+              [nombre]="'categoría ' + categoria.name"
               [acciones]="[
-                { codigo: 'editar', etiqueta: 'Editar' },
+                { codigo: 'editar', etiqueta: 'Editar', icono: 'editar' },
                 {
                   codigo: 'activar',
+                  icono: 'encendido',
                   etiqueta: categoria.isActive ? 'Desactivar' : 'Reactivar',
                   peligro: categoria.isActive,
                 },
               ]"
               (seleccionado)="elegir(categoria, $event)"
-            /></div
-        ></app-tarjeta>
+            />
+          </div>
+        </div>
       }
     </app-tabla-paginada>
     @if (formularioAbierto()) {
@@ -117,7 +117,7 @@ export class Categorias {
   readonly error = signal('');
   readonly inactivas = new FormControl(false, { nonNullable: true });
   readonly recargar = new Subject<void>();
-  readonly rejilla = 'minmax(160px, 1fr) minmax(260px, 2fr) 120px 80px';
+  readonly rejilla = 'minmax(160px, 1fr) minmax(260px, 2fr) 120px 100px';
   readonly formularioAbierto = signal(false);
   readonly editarCategoria = signal<Categoria | null>(null);
   readonly pendiente = signal<Categoria | null>(null);

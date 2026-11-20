@@ -30,7 +30,10 @@ El cliente debe enviar las cookies (`credentials: 'include'` o equivalente).
 
 Por defecto una sesión vence tras 30 minutos sin actividad o a las 8 horas de
 crearse. `last_seen_at` se escribe como máximo una vez por minuto, por lo que la
-medición de inactividad tiene esa granularidad. La actividad no extiende el límite
+medición de inactividad tiene esa granularidad. Actividad significa peticiones
+autenticadas, incluido el polling del contador de notificaciones; no mide teclado
+o ratón. Una pestaña visible puede mantener el plazo de inactividad, pero nunca
+el absoluto. La actividad no extiende el límite
 absoluto. Cada petición autenticada comprueba también revocación, usuario activo
 y vencimiento de la cuenta; desactivar o vencer una cuenta invalida su acceso en
 la siguiente petición. Los IDs bigint del perfil se devuelven como cadenas.
@@ -48,7 +51,10 @@ Todos los POST, PUT, PATCH y DELETE requieren `Origin` igual a
 `FRONTEND_ORIGIN`. Solo cuando falta ese encabezado se acepta el origen de
 `Referer`; si falta también, se rechaza con 403 `CSRF_REJECTED`. El cuerpo debe
 ser `application/json` (415 `JSON_REQUIRED` en caso contrario), incluido logout
-con `{}`. La validación sucede antes de procesar las credenciales.
+con `{}`. La única excepción es multipart/form-data en POST /api/tickets para
+su imagen inicial: conserva la misma comprobación de origen, sesión y contraseña
+definitiva. Ninguna ruta de autenticación acepta multipart. La validación sucede
+antes de procesar las credenciales.
 CORS permite credenciales exclusivamente al origen configurado.
 
 Cinco fallos consecutivos bloquean la cuenta durante 15 minutos. Un acceso
@@ -262,3 +268,12 @@ No hay recuperación automática por enlaces/códigos ni integración de
 autenticación con Telegram.
 Hay auditoría persistente de administración, solicitudes elegibles de recuperación y creación de tickets; la
 cobertura completa de auditoría y respaldo de EP-10 llegará después.
+
+## Mismo origen en Render
+
+El backend compilado sirve Angular y /api bajo FRONTEND_ORIGIN HTTPS. Render
+termina TLS; TRUST_PROXY=1 permite interpretar su salto de proxy sin confiar en
+cualquier X-Forwarded-For. Se conservan cookies Secure/HttpOnly/SameSite=Lax y
+Origin/Referer estricto. Estáticos y fallback SPA no consultan sesión; las rutas
+/api la siguen exigiendo, incluso para cambio obligatorio. No hay Supabase Auth.
+[Guía de producción](../../docs/deployment-render-supabase.md).

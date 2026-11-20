@@ -81,7 +81,7 @@ La operación afecta a toda la base configurada: úsala solo en la base local
 dedicada a HelpDesk. No borra el volumen ni otras bases del contenedor.
 
 El seed es una transacción: inserta cuatro empleados y una cuenta temporal `@helpdesk.local`, cinco
-categorías y seis tickets, uno por estado. Usa `ON CONFLICT DO NOTHING`; para tickets
+categorías y siete tickets: uno por estado y otro Creado ya asignado. Usa `ON CONFLICT DO NOTHING`; para tickets
 también comprueba asunto y solicitante antes de insertar, sin introducir una
 restricción artificial sobre los asuntos de tickets reales. Los ejemplos
 existentes no se sobrescriben. Las secuencias pueden tener saltos al repetir
@@ -133,9 +133,8 @@ restablece contraseñas existentes. Consulta [la guía de autenticación](../doc
   usuarios ni tickets. Las FK por sí solas no impiden borrar filas sin referencias;
   la API aplica permisos y no expone rutas DELETE.
 - Los únicos triggers actualizan `updated_at` en users, categories y tickets.
-  La aplicación valida roles. Las transiciones y la escritura de fechas de
-  resolución/cierre/cancelación quedan pendientes; la base no obliga a pasar
-  por estados intermedios.
+  La aplicación valida roles. La API aplica las nueve transiciones permitidas y escribe fechas de resolución,
+  cierre y cancelación. La base mantiene códigos/FK; la máquina está en el servicio.
 - Las fechas son timestamptz; PostgreSQL conserva instantes y su presentación
   depende de la zona de la sesión. El ejecutor SQL usa UTC.
 
@@ -151,10 +150,10 @@ restablece contraseñas existentes. Consulta [la guía de autenticación](../doc
 | 6     | `cancelado`  | Cancelado  | true       |
 
 Cerrado representa una resolución exitosa; el texto actual del catálogo menciona
-confirmación del usuario. El acuerdo de producto establece que cierra el agente
-y solo cancela el supervisor; esos endpoints todavía no existen. Cancelado
+confirmación del usuario. El acuerdo vigente permite cierre al propietario, supervisor o administrador;
+la cancelación desde creado/en espera usa esos mismos derechos. Cancelado
 significa que se decidió no continuar, por ejemplo por un registro erróneo. Las
-reglas futuras se validarán en la aplicación; la base no restringe transiciones.
+reglas se validan en la aplicación; la base no restringe transiciones.
 
 El ejemplo cancelado conserva un agente asignado, pero `resolved_at` y
 `closed_at` quedan en NULL: cancelar no representa una resolución exitosa ni
@@ -166,12 +165,65 @@ un cierre confirmado. `canceled_at` registra la cancelación del ejemplo; no hay
 erDiagram
     roles ||--o{ users : role_id
     users ||--o{ sessions : user_id
+    users ||--o{ notifications : user_id
+    tickets o|--o{ notifications : ticket_id
     users o|--o{ users : created_by
     users o|--o{ audit_events : actor_user_id
     users ||--o{ tickets : requester_id
     users o|--o{ tickets : assigned_agent_id
     categories ||--o{ tickets : category_id
     ticket_statuses ||--o{ tickets : status_id
+    tickets ||--o{ ticket_events : ticket_id
+    tickets ||--o{ ticket_notes : ticket_id
+    tickets ||--o| ticket_attachments : ticket_id
+    users ||--o{ ticket_notes : author_user_id
+    ticket_notes o|--o{ ticket_events : note_id
+    users ||--o{ ticket_events : actor_user_id
+    users o|--o{ ticket_events : from_agent_user_id
+    users o|--o{ ticket_events : to_agent_user_id
+    ticket_statuses o|--o{ ticket_events : from_status
+    ticket_statuses o|--o{ ticket_events : to_status
+
+    notifications {
+        bigint id PK
+        bigint user_id FK
+        text type
+        text title
+        text message
+        bigint ticket_id FK
+        timestamptz read_at
+        timestamptz created_at
+    }
+    ticket_attachments {
+        bigint id PK
+        bigint ticket_id FK,UK
+        text original_filename
+        text mime_type "JPEG, PNG o WebP"
+        integer size_bytes "1 a 10485760"
+        bytea data
+        timestamptz created_at
+    }
+    ticket_notes {
+        bigint id PK
+        bigint ticket_id FK
+        bigint author_user_id FK
+        text body "Texto plano; interno e inmutable"
+        timestamptz created_at
+    }
+    ticket_events {
+        bigint id PK
+        bigint ticket_id FK
+        text event_type "Incluye priority_changed y note_added"
+        bigint note_id FK "Nullable; solo note_added"
+        text from_priority "Nullable; solo cambio de prioridad"
+        text to_priority "Nullable; solo cambio de prioridad"
+        bigint actor_user_id FK
+        text from_status FK "Nullable"
+        text to_status FK "Nullable"
+        bigint from_agent_user_id FK "Nullable"
+        bigint to_agent_user_id FK "Nullable"
+        timestamptz created_at
+    }
 
     roles {
         smallint id PK
@@ -180,6 +232,7 @@ erDiagram
         text description
     }
     users {
+        text telegram_username "Nullable; @usuario público sin @, configurado por administrador"
         bigint id PK
         text full_name
         text email "UNIQUE lower(email)"
@@ -238,6 +291,7 @@ erDiagram
     tickets {
         bigint id PK
         text reference UK "Generada desde id"
+        text priority "NOT NULL; baja/media/alta/urgente, default media"
         text subject
         text description
         bigint category_id FK
@@ -280,3 +334,81 @@ podman exec -i backend_postgres_1 psql -U helpdesk -d helpdesk < test/schema.sql
 Las pruebas de integración requieren PostgreSQL local y permiso `CREATEDB`.
 Crean una base temporal aislada y la eliminan al terminar; no resetean HelpDesk.
 Comprueban transacciones, inmutabilidad, exclusión mutua y protecciones locales.
+
+## Actividad de tickets
+
+`0013_ticket_activity.sql` incorpora actividad estructurada, con FK RESTRICT,
+validación de forma por evento e índice `(ticket_id, created_at DESC, id DESC)`.
+Solo hay un created por ticket. El backfill conserva solicitante/fecha de creación;
+no reconstruye transiciones desconocidas. Las operaciones nuevas guardan cambio,
+actividad y auditoría en una transacción. Consulta [tickets](../docs/tickets.md).
+El seed nuevo incluye siete escenarios y eventos válidos; ejemplos ya existentes
+conservan su historia. Repetir el seed no duplica tickets o eventos.
+
+## Prioridad
+
+0014_ticket_priority.sql añade priority TEXT NOT NULL DEFAULT media con CHECK de
+cuatro valores. Todos los existentes quedan Media sin inferencia ni eventos nuevos.
+Amplía ticket_events con priority_changed y from_priority/to_priority; el CHECK de
+forma exige ambos diferentes para ese tipo y null para los demás. La API modifica
+prioridad, actividad y auditoría en una transacción, solo con permiso de soporte y
+fuera de Cerrado/Cancelado. El seed varía prioridades iniciales únicamente de los
+ejemplos insertados; no restablece los existentes. Consulta [tickets](../docs/tickets.md).
+
+## Notas internas y contacto
+
+0015_ticket_notes.sql crea ticket_notes (identity bigint, ticket_id y author_user_id
+FK RESTRICT, body no vacío de hasta 5000 caracteres, created_at timestamptz), con
+índice (ticket_id, created_at). ticket_events incorpora note_added y note_id FK;
+el CHECK de forma exige referencia solo para notas y mantiene los demás tipos.
+El cuerpo no se duplica en eventos o auditoría. La API no permite editar ni borrar
+notas. Inserción, actividad y ticket.note_added con noteId son atómicos, sin UPDATE
+del ticket. Lectura y total de actividad excluyen notas para quien no tiene permiso.
+
+El seed añade tres notas con eventos únicamente a los ejemplos activos que inserta
+en esa ejecución; repetirlo conserva toda historia existente. No añade notas
+posteriores al cierre o cancelación.
+
+0016_agent_telegram_username.sql añade users.telegram_username nullable con CHECK
+para un usuario convencional de Telegram (5–32 caracteres). Lo administra el
+administrador y permite construir https://t.me/usuario para el propietario del
+ticket. No guarda ID numérico, token, vínculos por bot ni conversaciones Telegram.
+Consulta [contratos y permisos](../docs/tickets.md).
+
+## Imagen inicial
+
+0017_ticket_attachments.sql añade una imagen opcional por ticket, solo al crearlo:
+ticket_attachments con UNIQUE(ticket_id), FK RESTRICT, metadata, BYTEA y fecha.
+Los CHECK limitan MIME a JPEG/PNG/WebP, tamaño a 1–10485760 bytes (10 MiB) y exigen
+que octet_length(data) coincida con size_bytes. No necesita otro índice además de
+PK y UNIQUE. No modifica tickets previos ni el seed normal; las imágenes de prueba
+son fixtures de 2×2 píxeles. Ticket, imagen, evento y auditoría se insertan en una
+transacción. La API solo expone metadata en JSON y ofrece una lectura binaria
+protegida; no hay mutaciones posteriores. Consulta [tickets](../docs/tickets.md).
+
+## Notificaciones personales
+
+0018_notifications.sql añade notifications con destinatario obligatorio, destino
+ticket opcional (ambas FK RESTRICT), tipo cerrado, título, mensaje, read_at y
+created_at. Índice parcial de no leídas por usuario e índice de listado por
+usuario/fecha/ID. No hay borrado, updated_at ni retención automática. Los avisos
+web forman parte de la transacción del ticket; Telegram solo se intenta después
+del commit. Consulta [reglas y endpoints](../docs/notifications.md).
+
+## Cierre v1 y reportes
+
+Las 19 migraciones actuales terminan en `0019_ticket_started_notification.sql`.
+Reportes y exportación CSV consultan en modo solo lectura; no requieren una nueva
+migración ni tabla estadística. El seed solo escribe datos locales y no ejecuta
+las pasarelas de correo/Telegram. La verificación de cierre aplicó las migraciones
+sobre una base desechable y ejecutó el seed dos veces sin duplicar escenarios;
+no se recreó ni se borró la base de desarrollo del usuario.
+[Estado final y limitaciones](../../docs/project-status.md).
+
+## Supabase (solo PostgreSQL)
+
+La conexión usa DATABASE_URL con Session Pooler y TLS verificado; no requiere
+POSTGRES_* de Compose. No se ejecuta seed/reset contra Supabase. El build y el
+start no migran automáticamente. Comandos compilados, CA, desactivación de Data API
+y bootstrap del único administrador sin datos de prueba están en la
+[guía Render + Supabase](../../docs/deployment-render-supabase.md).

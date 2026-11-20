@@ -16,6 +16,8 @@ import { Icono, NombreIcono } from '../../shared/ui/icono';
 import { Alerta } from '../../shared/ui/alerta';
 import { Tarjeta } from '../../shared/ui/tarjeta';
 import { Filtro } from '../../shared/ui/filtro';
+import { InsigniaPrioridad } from '../../shared/ui/insignia-prioridad';
+import { prioridadesTicket } from '../../core/tickets/prioridad';
 import { InsigniaEstado, EstadoTicket } from '../../shared/ui/insignia-estado';
 
 import { Selector } from '../../shared/ui/selector';
@@ -26,7 +28,7 @@ import { Modal } from '../../shared/ui/modal';
 import { Confirmacion } from '../../shared/ui/confirmacion';
 import { Paginador } from '../../shared/ui/paginador';
 import { TablaPaginada } from '../../shared/ui/tabla-paginada';
-import { MenuAcciones } from '../../shared/ui/menu-acciones';
+import { AccionesFila } from '../../shared/ui/acciones-fila';
 import { ClaveTemporal } from '../../shared/ui/clave-temporal';
 import { InsigniaCuenta } from '../../shared/ui/insignia-cuenta';
 import { AvisoFlotante, Avisos } from '../../shared/ui/aviso-flotante';
@@ -43,7 +45,7 @@ import { AvisoFlotante, Avisos } from '../../shared/ui/aviso-flotante';
     Confirmacion,
     Paginador,
     TablaPaginada,
-    MenuAcciones,
+    AccionesFila,
     ClaveTemporal,
     InsigniaCuenta,
     AvisoFlotante,
@@ -56,6 +58,7 @@ import { AvisoFlotante, Avisos } from '../../shared/ui/aviso-flotante';
     Tarjeta,
     Filtro,
     InsigniaEstado,
+    InsigniaPrioridad,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `<main class="mx-auto max-w-[1180px] space-y-8 px-6 py-10">
@@ -127,7 +130,12 @@ import { AvisoFlotante, Avisos } from '../../shared/ui/aviso-flotante';
     ></app-tarjeta>
     <app-tarjeta
       ><section class="space-y-5 p-6">
-        <h2 class="text-xl font-bold text-primario">Estados y filtros</h2>
+        <h2 class="text-xl font-bold text-primario">Estados, prioridades y filtros</h2>
+        <div class="flex flex-wrap gap-3">
+          @for (prioridad of prioridades; track prioridad) {
+            <app-insignia-prioridad [prioridad]="prioridad" />
+          }
+        </div>
         <div class="flex flex-wrap gap-3">
           @for (estado of estados; track estado) {
             <app-insignia-estado [codigo]="estado" />
@@ -195,11 +203,11 @@ import { AvisoFlotante, Avisos } from '../../shared/ui/aviso-flotante';
             variante="secundario"
             (accion)="avisos.mostrar('Cambios guardados en la demostración.')"
             >Mostrar aviso</app-boton
-          ><app-menu-acciones
+          ><app-acciones-fila
             nombre="Ejemplo"
             [acciones]="[
-              { codigo: 'editar', etiqueta: 'Editar' },
-              { codigo: 'desactivar', etiqueta: 'Desactivar', peligro: true },
+              { codigo: 'editar', etiqueta: 'Editar', icono: 'editar' },
+              { codigo: 'desactivar', etiqueta: 'Desactivar', icono: 'encendido', peligro: true },
             ]"
             (seleccionado)="avisos.mostrar('Acción de demostración: ' + $event)"
           />
@@ -207,15 +215,10 @@ import { AvisoFlotante, Avisos } from '../../shared/ui/aviso-flotante';
     ></app-tarjeta>
     <section class="space-y-5">
       <h2 class="text-xl font-bold text-primario">Tabla y paginación</h2>
-      <app-tabla-paginada
-        nombre="ejemplos"
-        [columnas]="['Nombre', 'Estado']"
-        rejilla="1fr 140px"
-        [anchoMinimo]="420"
-        ><app-tarjeta role="row" class="grid grid-cols-2 p-5"
-          ><span role="cell">Registro de demostración</span
-          ><span role="cell">Activo</span></app-tarjeta
-        ></app-tabla-paginada
+      <app-tabla-paginada nombre="ejemplos" [columnas]="['Nombre', 'Estado']" rejilla="1fr 140px"
+        ><div role="row" class="fila-responsive grid">
+          <span role="cell">Registro de demostración</span><span role="cell">Activo</span>
+        </div></app-tabla-paginada
       ><app-paginador
         [pagina]="pagina()"
         [tamano]="tamano()"
@@ -322,6 +325,7 @@ export class GuiaUi {
   );
   protected readonly variantesBoton = ['primario', 'secundario', 'peligro', 'fantasma'] as const;
   protected readonly variantesAlerta = ['exito', 'aviso', 'peligro', 'info'] as const;
+  protected readonly prioridades = prioridadesTicket;
   protected readonly estados: EstadoTicket[] = [
     'creado',
     'en_proceso',
@@ -342,6 +346,14 @@ export class GuiaUi {
     'salir',
     'llave',
     'desplegar',
+    'campana',
+    'telegram',
+    'encendido',
+    'desbloquear',
+    'correcto',
+    'alerta',
+    'editar',
+    'cerrar',
   ];
   protected readonly correo = new FormControl('', { nonNullable: true });
   protected readonly campoError = new FormControl('', { nonNullable: true });

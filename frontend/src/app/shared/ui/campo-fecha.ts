@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, forwardRef } from '@angular/core';
+import { ChangeDetectionStrategy, Component, forwardRef, input } from '@angular/core';
 import { NG_VALUE_ACCESSOR } from '@angular/forms';
 import { ControlCampo } from './control-campo';
 
@@ -6,7 +6,7 @@ import { ControlCampo } from './control-campo';
   selector: 'app-campo-fecha',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { class: 'block' },
+  host: { class: 'block min-w-0' },
   providers: [
     { provide: NG_VALUE_ACCESSOR, useExisting: forwardRef(() => CampoFecha), multi: true },
   ],
@@ -15,7 +15,7 @@ import { ControlCampo } from './control-campo';
       [class]="ocultarEtiqueta() ? 'sr-only' : 'mb-2 block font-semibold text-texto-suave'"
       >{{ etiqueta() }}</label
     ><input
-      type="datetime-local"
+      [type]="tipo()"
       [id]="identificador()"
       [value]="valor()"
       [disabled]="deshabilitado()"
@@ -23,7 +23,7 @@ import { ControlCampo } from './control-campo';
       [attr.aria-invalid]="error() ? 'true' : null"
       (blur)="tocar()"
       (input)="escribir($event)"
-      class="h-[46px] w-full rounded-boton border border-linea bg-superficie-suave px-4 text-texto disabled:opacity-60"
+      class="h-[46px] w-full min-w-0 rounded-boton border border-linea bg-superficie-suave px-4 text-texto disabled:opacity-60"
     />
     @if (ayuda()) {
       <p [id]="identificador() + '-ayuda'" class="mt-2 text-xs text-texto-suave">{{ ayuda() }}</p>
@@ -34,4 +34,6 @@ import { ControlCampo } from './control-campo';
       </p>
     }`,
 })
-export class CampoFecha extends ControlCampo {}
+export class CampoFecha extends ControlCampo {
+  readonly tipo = input<'date' | 'datetime-local'>('datetime-local');
+}

@@ -1,3 +1,4 @@
+import { notificacionesSinRed } from '../../pruebas/notificaciones';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
@@ -19,6 +20,8 @@ const ticket: Ticket = {
   subject: 'Impresora',
   description: 'Primera línea\n<img src=x onerror=alert(1)>',
   status: 'creado',
+  priority: 'media',
+  attachment: null,
   category: { id: '8', name: 'Hardware' },
   requester: { id: '5', fullName: 'Ana', email: 'ana@example.invalid' },
   assignedAgent: null,
@@ -34,7 +37,12 @@ describe('Tickets y detalle', () => {
   let c: Tickets;
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideRouter(routes), provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        notificacionesSinRed,
+        provideRouter(routes),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
     });
     http = TestBed.inject(HttpTestingController);
     TestBed.inject(AuthService).cargarSesion().subscribe();
@@ -58,9 +66,67 @@ describe('Tickets y detalle', () => {
     lista();
     await pagina.fixture.whenStable();
     const e = pagina.routeNativeElement!;
-    expect(e.querySelector('a[href="/tickets/123"]')?.textContent).toContain('TK-000123');
-    expect(e.textContent).toContain('Sin asignar');
+    const fila = e.querySelector<HTMLButtonElement>('button[data-ticket="123"]')!;
+    expect(fila.getAttribute('aria-label')).toContain('Ver ticket TK-000123');
+    expect(fila.getAttribute('aria-pressed')).toBe('false');
+    expect(fila.getAttribute('aria-controls')).toBe('panel-vista-ticket');
+    for (const texto of ['Impresora', 'Hardware', 'Sin asignar', 'Creado', 'Media'])
+      expect(fila.textContent).toContain(texto);
+    expect(e.querySelector('#panel-vista-ticket')?.textContent).toContain('Selecciona un ticket');
     expect(e.textContent).toContain('Creado');
+    expect(e.querySelector('app-insignia-prioridad')?.textContent).toContain('Media');
+  });
+  it('selecciona sin navegar, cambia el panel y vuelve a la lista conservando foco y filtros', async () => {
+    await abrir('/tickets?priority=media&categoryId=8');
+    const otro = { ...ticket, id: '124', number: 'TK-000124', subject: 'Otro asunto' };
+    lista([ticket, otro]);
+    const e = pagina.routeNativeElement!;
+    e.querySelector<HTMLButtonElement>('button[data-ticket="123"]')!.click();
+    await pagina.fixture.whenStable();
+    http.expectOne('/api/tickets/123').flush(ticket);
+    http
+      .expectOne('/api/tickets/123/events?page=1&pageSize=50')
+      .flush({ data: [], total: 0, page: 1, pageSize: 50 });
+    await pagina.fixture.whenStable();
+    expect(e.querySelector('#panel-vista-ticket')?.textContent).toContain(ticket.description);
+    expect(e.querySelector('button[data-ticket="123"]')?.getAttribute('aria-pressed')).toBe('true');
+    expect(TestBed.inject(Router).url).toBe('/tickets?priority=media&categoryId=8');
+    expect(e.querySelector('a[href="/tickets/123"]')?.textContent).toContain(
+      'Abrir detalle completo',
+    );
+    e.querySelector<HTMLButtonElement>('button[data-ticket="124"]')!.click();
+    await pagina.fixture.whenStable();
+    http.expectOne('/api/tickets/124').flush(otro);
+    http
+      .expectOne('/api/tickets/124/events?page=1&pageSize=50')
+      .flush({ data: [], total: 0, page: 1, pageSize: 50 });
+    await pagina.fixture.whenStable();
+    expect(e.querySelector('#panel-vista-ticket')?.textContent).toContain('Otro asunto');
+    expect(e.querySelector('#panel-vista-ticket')?.textContent).not.toContain('TK-000123');
+    c.volverALista();
+    await pagina.fixture.whenStable();
+    expect(c.seleccionado()).toBeNull();
+    expect(document.activeElement).toBe(e.querySelector('button[data-ticket="124"]'));
+    expect(TestBed.inject(Router).url).toContain('priority=media');
+  });
+  it('cancela la lectura de una selección obsoleta y quita la selección si sale del filtro', async () => {
+    await abrir();
+    lista([ticket, { ...ticket, id: '124' }]);
+    c.seleccionar('123');
+    await pagina.fixture.whenStable();
+    const anterior = http.expectOne('/api/tickets/123');
+    c.seleccionar('124');
+    await pagina.fixture.whenStable();
+    expect(anterior.cancelled).toBe(true);
+    http.expectOne('/api/tickets/124').flush({ ...ticket, id: '124' });
+    http
+      .expectOne('/api/tickets/124/events?page=1&pageSize=50')
+      .flush({ data: [], total: 0, page: 1, pageSize: 50 });
+    c.filtrar({ status: 'cerrado' });
+    await pagina.fixture.whenStable();
+    lista([]);
+    await pagina.fixture.whenStable();
+    expect(c.seleccionado()).toBeNull();
   });
   it('distingue vacío de sin coincidencias y permite limpiar filtros', async () => {
     await abrir();
@@ -139,6 +205,9 @@ describe('Tickets y detalle', () => {
     reload.flush({ data: [ticket], total: 1, page: 1, pageSize: 20 });
     await pagina.fixture.whenStable();
     http.expectOne('/api/tickets/123').flush(ticket);
+    http
+      .expectOne('/api/tickets/123/events?page=1&pageSize=50')
+      .flush({ data: [], page: 1, pageSize: 50, total: 0 });
     await pagina.fixture.whenStable();
     expect(TestBed.inject(Router).url).toBe('/tickets/123');
     expect(TestBed.inject(Avisos).aviso()?.mensaje).toBe('Ticket TK-000123 creado correctamente.');
@@ -153,18 +222,23 @@ describe('Tickets y detalle', () => {
       pageSize: 20,
       search: undefined,
       status: undefined,
+      priority: undefined,
       categoryId: undefined,
     }));
   it('detalle conserva saltos y representa descripción como texto, sin HTML', async () => {
     pagina = await RouterTestingHarness.create('/tickets/123');
     expect(pagina.routeNativeElement!.textContent).toContain('Cargando ticket');
     http.expectOne('/api/tickets/123').flush(ticket);
+    http
+      .expectOne('/api/tickets/123/events?page=1&pageSize=50')
+      .flush({ data: [], page: 1, pageSize: 50, total: 0 });
     await pagina.fixture.whenStable();
     const e = pagina.routeNativeElement!;
     expect(e.textContent).toContain('TK-000123');
     expect(e.textContent).toContain('Sin asignar');
+
     expect(e.querySelector('.whitespace-pre-wrap')?.textContent).toBe(ticket.description);
-    expect(e.querySelector('img')).toBeNull();
+    expect(e.querySelector('.whitespace-pre-wrap img')).toBeNull();
     expect(e.querySelector('textarea')).toBeNull();
   });
   it('detalle 404 no confirma datos ni ofrece cambios de estado', async () => {
@@ -188,15 +262,57 @@ describe('Tickets y detalle', () => {
     expect(d.error()).toContain('conectar');
     d.recargar.next();
     http.expectOne('/api/tickets/123').flush(ticket);
+    http
+      .expectOne('/api/tickets/123/events?page=1&pageSize=50')
+      .flush({ data: [], page: 1, pageSize: 50, total: 0 });
     await pagina.fixture.whenStable();
     expect(pagina.routeNativeElement!.textContent).toContain(ticket.number);
   });
+
+  it('restaura prioridad desde URL, aplica las cuatro opciones y conserva los demás filtros al paginar', async () => {
+    await abrir(
+      '/tickets?priority=alta&status=creado&categoryId=8&search=impresora&page=2&pageSize=10',
+    );
+    let r = http.expectOne((req) => req.url === '/api/tickets');
+    expect(r.request.params.get('priority')).toBe('alta');
+    r.flush({ data: [{ ...ticket, priority: 'alta' }], total: 31, page: 2, pageSize: 10 });
+    pagina.detectChanges();
+    expect(c.prioridad.value).toBe('alta');
+    expect(
+      pagina.routeNativeElement!.querySelector('app-insignia-prioridad')?.textContent,
+    ).toContain('Alta');
+    for (const priority of ['baja', 'media', 'alta', 'urgente']) {
+      c.prioridad.setValue(priority);
+      await pagina.fixture.whenStable();
+      r = http.expectOne((req) => req.url === '/api/tickets');
+      expect(r.request.params.get('priority')).toBe(priority);
+      expect(r.request.params.get('page')).toBe('1');
+      expect(r.request.params.get('status')).toBe('creado');
+      r.flush({ data: [{ ...ticket, priority }], total: 31, page: 1, pageSize: 10 });
+      expect(TestBed.inject(Router).url).toContain('priority=' + priority);
+    }
+    c.pagina(2);
+    await pagina.fixture.whenStable();
+    r = http.expectOne((req) => req.url === '/api/tickets');
+    expect(r.request.params.get('priority')).toBe('urgente');
+    expect(r.request.params.get('page')).toBe('2');
+    r.flush({ data: [ticket], total: 31, page: 2, pageSize: 10 });
+    c.prioridad.setValue('');
+    await pagina.fixture.whenStable();
+    r = http.expectOne((req) => req.url === '/api/tickets');
+    expect(r.request.params.has('priority')).toBe(false);
+    r.flush({ data: [], total: 0, page: 1, pageSize: 10 });
+  });
+  it('normaliza una prioridad desconocida de URL', () =>
+    expect(
+      leerFiltrosTickets(convertToParamMap({ priority: 'critica' })).priority,
+    ).toBeUndefined());
 });
 describe('Nuevo ticket', () => {
   let http: HttpTestingController;
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [notificacionesSinRed, provideHttpClient(), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
   });
@@ -234,7 +350,12 @@ describe('Nuevo ticket', () => {
     c.enviar();
     expect(c.enviando()).toBe(true);
     const r = http.expectOne('/api/tickets');
-    expect(r.request.body).toEqual({ subject: 'Impresora', description: 'Texto', categoryId: '8' });
+    expect(r.request.body instanceof FormData).toBe(true);
+    expect(Object.fromEntries((r.request.body as FormData).entries())).toEqual({
+      subject: 'Impresora',
+      description: 'Texto',
+      categoryId: '8',
+    });
     r.flush(ticket);
     expect(result).toEqual(ticket);
     expect(c.enviando()).toBe(false);

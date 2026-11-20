@@ -29,7 +29,6 @@ describe.skipIf(!databaseUrl)(databaseUrl ? 'autenticación contra PostgreSQL re
     vi.stubEnv('POSTGRES_PASSWORD', decodeURIComponent(url.password));
     vi.stubEnv('POSTGRES_DB', url.pathname.slice(1));
     vi.stubEnv('TELEGRAM_BOT_TOKEN', '');
-    vi.stubEnv('TELEGRAM_ALLOWED_USER_IDS', '');
     const { env } = await import('../../src/config/env.js');
     config = {
       ...env,
@@ -161,6 +160,9 @@ describe.skipIf(!databaseUrl)(databaseUrl ? 'autenticación contra PostgreSQL re
   });
 
   it('login de producción usa Host, HttpOnly, Lax y Secure sin Domain', async () => {
+    // Aísla la cookie: el check backend no necesita haber construido Angular.
+    const frontend = await import('../../src/frontend.js');
+    vi.spyOn(frontend, 'serveFrontend').mockImplementation(() => {});
     const account = await user();
     const production = createApp({ ...config, nodeEnv: 'production' });
     const auth = await login(account, production);

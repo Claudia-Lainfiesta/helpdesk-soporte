@@ -43,7 +43,6 @@ describe.skipIf(!databaseUrl)(
       vi.stubEnv('POSTGRES_PASSWORD', decodeURIComponent(url.password));
       vi.stubEnv('POSTGRES_DB', url.pathname.slice(1));
       vi.stubEnv('TELEGRAM_BOT_TOKEN', '');
-      vi.stubEnv('TELEGRAM_ALLOWED_USER_IDS', '');
       const { env } = await import('../../src/config/env.js');
       ({ pool } = await import('../../src/db/pool.js'));
       const { createApp } = await import('../../src/app.js');
@@ -82,6 +81,10 @@ describe.skipIf(!databaseUrl)(
       } finally {
         // Solo objetos del esquema privado creado por esta suite.
         await pool.query('DELETE FROM audit_events');
+        await pool.query('DELETE FROM notifications');
+        await pool.query('DELETE FROM ticket_events');
+        await pool.query('DELETE FROM ticket_notes');
+        await pool.query('DELETE FROM ticket_attachments');
         await pool.query('DELETE FROM tickets');
         await pool.query('DELETE FROM sessions');
         await pool.query('UPDATE users SET created_by = NULL');

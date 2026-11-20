@@ -90,4 +90,38 @@ describe('Interceptor de sesión', () => {
     expect(navegar).not.toHaveBeenCalled();
     expect(auth.sesionTerminada()).toBe(false);
   });
+  it('FormData conserva credenciales y deja el Content-Type al navegador, incluso si el llamador lo fijó', () => {
+    const body = new FormData();
+    body.set('subject', 'Asunto');
+    cliente
+      .post('/api/tickets', body, { headers: { 'Content-Type': 'application/json' } })
+      .subscribe();
+    const r = http.expectOne('/api/tickets');
+    expect(r.request.body).toBe(body);
+    expect(r.request.withCredentials).toBe(true);
+    expect(r.request.headers.has('Content-Type')).toBe(false);
+    r.flush({});
+  });
+  it('interpreta errores JSON recibidos como Blob y mantiene el cambio obligatorio en CSV', async () => {
+    auth.cargarSesion().subscribe();
+    http.expectOne('/api/auth/me').flush(usuarioPrueba);
+    const navegar = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    const payload = JSON.stringify({
+      error: { code: 'PASSWORD_CHANGE_REQUIRED', message: 'Debes cambiar la contraseña.' },
+    });
+    const blob = new Blob([payload], { type: 'application/json' });
+    Object.defineProperty(blob, 'text', { value: () => Promise.resolve(payload) });
+    const resultado = new Promise<void>((resolve) => {
+      cliente.get('/api/reports/export.csv', { responseType: 'blob' }).subscribe({
+        error: (error) => {
+          expect(error.codigo).toBe('PASSWORD_CHANGE_REQUIRED');
+          resolve();
+        },
+      });
+    });
+    http.expectOne('/api/reports/export.csv').flush(blob, { status: 403, statusText: 'Forbidden' });
+    await resultado;
+    expect(navegar).toHaveBeenCalledWith('/cambiar-contrasena');
+    expect(auth.usuario()?.mustChangePassword).toBe(true);
+  });
 });

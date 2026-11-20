@@ -1,3 +1,4 @@
+import { notificacionesSinRed } from '../../pruebas/notificaciones';
 import { TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { provideHttpClient } from '@angular/common/http';
@@ -26,7 +27,12 @@ describe('Pantalla de usuarios', () => {
   let componente: Usuarios;
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideRouter(routes), provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        notificacionesSinRed,
+        provideRouter(routes),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+      ],
     });
     http = TestBed.inject(HttpTestingController);
   });
@@ -55,6 +61,37 @@ describe('Pantalla de usuarios', () => {
     await pagina.fixture.whenStable();
     expect(pagina.routeNativeElement!.textContent).toContain('No hay usuarios');
     expect(pagina.routeNativeElement!.textContent).toContain('otros filtros');
+  });
+  it('agrupa usuarios en filas continuas, conservando columnas, temporalidad y acciones', async () => {
+    await abrir();
+    lista([
+      cuentaPrueba(),
+      cuentaPrueba({
+        id: '26',
+        fullName: 'Ana temporal',
+        temporary: true,
+        expiresAt: '2099-12-01T10:00:00Z',
+        isActive: false,
+      }),
+    ]);
+    await pagina.fixture.whenStable();
+    const tabla = pagina.routeNativeElement!.querySelector('[role="table"]')!;
+    expect(
+      Array.from(tabla.querySelectorAll('[role="columnheader"]')).map((e) => e.textContent?.trim()),
+    ).toEqual(['Usuario', 'Rol', 'Estado', 'Último acceso', 'Acciones']);
+    const grupo = tabla.querySelector('[role="rowgroup"]')!;
+    const filas = grupo.querySelectorAll('[role="row"]');
+    expect(filas).toHaveLength(2);
+    expect(tabla.querySelector('app-tarjeta')).toBeNull();
+    for (const fila of filas) {
+      expect(fila.parentElement).toBe(grupo);
+      expect(fila.querySelectorAll('[role="cell"]')).toHaveLength(5);
+      expect(fila.querySelector('button[aria-label^="Editar usuario"]')).not.toBeNull();
+      expect(fila.querySelector('button[aria-label^="Restablecer contraseña"]')).not.toBeNull();
+    }
+    expect(filas[1].textContent).toContain('Temporal');
+    expect(filas[1].textContent).toContain('Vence');
+    expect(filas[1].textContent).toContain('Inactiva');
   });
   it('muestra el error real y reintenta', async () => {
     await abrir();
@@ -123,10 +160,15 @@ describe('Pantalla de usuarios', () => {
     lista([propia]);
     const acciones = componente.acciones(propia);
     for (const codigo of ['desactivar', 'restablecer']) {
-      const accion = acciones.find((a) => a.codigo === codigo)!;
-      expect(accion.deshabilitada).toBe(true);
-      expect(accion.explicacion).toBeTruthy();
+      expect(acciones.find((a) => a.codigo === codigo)).toBeUndefined();
     }
+    expect(pagina.routeNativeElement!.textContent).toContain('No puedes desactivarte');
+    expect(pagina.routeNativeElement!.querySelector('app-menu-acciones')).toBeNull();
+    expect(
+      componente
+        .acciones({ ...propia, lockedUntil: new Date(Date.now() + 60000).toISOString() })
+        .map((a) => a.codigo),
+    ).toContain('desbloquear');
     componente.elegir(propia, 'desactivar');
     expect(componente.pendiente()).toBeNull();
     componente.elegir(propia, 'editar');
@@ -141,7 +183,10 @@ describe('Pantalla de usuarios', () => {
     'confirma %s y muestra el error del servidor',
     async (accion) => {
       await abrir();
-      const cuenta = cuentaPrueba({ isActive: accion !== 'reactivar' });
+      const cuenta = cuentaPrueba({
+        isActive: accion !== 'reactivar',
+        lockedUntil: accion === 'desbloquear' ? new Date(Date.now() + 60000).toISOString() : null,
+      });
       lista([cuenta]);
       componente.elegir(cuenta, accion);
       expect(componente.pendiente()).not.toBeNull();
@@ -211,7 +256,7 @@ describe('Formulario de usuario', () => {
   let http: HttpTestingController;
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [notificacionesSinRed, provideHttpClient(), provideHttpClientTesting()],
     });
     http = TestBed.inject(HttpTestingController);
   });
@@ -299,5 +344,21 @@ describe('Formulario de usuario', () => {
     const r = http.expectOne('/api/users/25');
     expect(r.request.body).toEqual({ fullName: 'Nombre nuevo' });
     r.flush(cuentaPrueba());
+  });
+
+  it('administrador configura @usuario normalizado, puede quitarlo y rechaza URLs/IDs', () => {
+    const f = crear(cuentaPrueba());
+    const c = f.componentInstance;
+    for (const value of ['https://t.me/usuario', '1234567', 'abc']) {
+      c.formulario.controls.telegramUsername.setValue(value);
+      c.enviar();
+      http.expectNone('/api/users/25');
+      expect(c.campo('telegramUsername')).toContain('público');
+    }
+    c.formulario.controls.telegramUsername.setValue(' @Agente_Prueba ');
+    c.enviar();
+    const r = http.expectOne('/api/users/25');
+    expect(r.request.body).toEqual({ telegramUsername: 'agente_prueba' });
+    r.flush(cuentaPrueba({ telegramUsername: 'agente_prueba' }));
   });
 });

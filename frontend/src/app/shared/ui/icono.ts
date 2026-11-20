@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 const trazos = {
+  campana: ['M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9', 'M10 21h4'],
   ticket: ['M3 7h18v3a2 2 0 0 0 0 4v3H3v-3a2 2 0 0 0 0-4Z', 'M16 7v2m0 3v1m0 3v1'],
   etiqueta: ['M3 3h8l10 10-8 8L3 11Z', 'M7 7h.01'],
   usuarios: [
@@ -15,11 +16,17 @@ const trazos = {
   candado: ['M5 10h14v11H5Z', 'M8 10V7a4 4 0 0 1 8 0v3'],
   salir: ['M9 3H4v18h5', 'M9 12h12m-4-4 4 4-4 4'],
   llave: ['M8 14a5 5 0 1 1 5-5l8 0v4h-3v3h-4v-3Z'],
+  volver: ['m15 6-6 6 6 6', 'M9 12h12'],
   desplegar: ['m6 9 6 6 6-6'],
   cerrar: ['M6 6l12 12M6 18 18 6'],
   copiar: ['M9 9h12v12H9Z', 'M15 9V3H3v12h6'],
   acciones: ['M5 12h.01M12 12h.01M19 12h.01'],
   editar: ['m16 3 5 5L9 20l-6 1 1-6Z', 'm14 5 5 5'],
+  telegram: ['m22 3-4 18-7-6-4 4 1-7L2 9Z', 'M8 12 22 3M11 15 22 3'],
+  encendido: ['M12 2v10', 'M6 5a9 9 0 1 0 12 0'],
+  desbloquear: ['M5 10h14v11H5Z', 'M8 10V7a4 4 0 0 1 8 0'],
+  correcto: ['m5 12 4 4L19 6'],
+  alerta: ['M12 3 2 21h20Z', 'M12 9v4m0 4h.01'],
   menu: ['M3 6h18M3 12h18M3 18h18'],
 } as const;
 export type NombreIcono = keyof typeof trazos;

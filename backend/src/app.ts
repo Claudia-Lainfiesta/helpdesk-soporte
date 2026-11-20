@@ -1,5 +1,8 @@
 import express from 'express';
+import { notificationsRouter } from './notifications/routes.js';
+import type { SupportNotifier } from './integrations/telegram/support-group.js';
 import { ticketsRouter } from './tickets/routes.js';
+import { reportsRouter } from './reports/routes.js';
 import cors from 'cors';
 import helmet from 'helmet';
 import { env } from './config/env.js';
@@ -17,16 +20,20 @@ import type { UserConfig } from './users/config.js';
 import { recoveryRouter } from './auth/recovery/routes.js';
 import type { RecoveryDependencies } from './auth/recovery/routes.js';
 import type { MailConfig } from './mail/config.js';
+import { serveFrontend } from './frontend.js';
 
 export function createApp(
   config: AuthConfig & Partial<UserConfig> & { mail?: MailConfig } = env,
   recovery?: RecoveryDependencies,
+  support?: SupportNotifier,
 ) {
   const app = express();
 
   app.disable('x-powered-by');
   app.set('trust proxy', config.trustProxy);
-  app.use(helmet());
+  app.use(
+    helmet({ contentSecurityPolicy: { directives: { imgSrc: ["'self'", 'data:', 'blob:'] } } }),
+  );
   app.use(
     cors({
       origin: (origin, callback) => callback(null, origin === config.frontendOrigin),
@@ -38,8 +45,7 @@ export function createApp(
   app.use('/api/health', healthRouter);
   // La solicitud pública no carga ni actualiza sesiones, ni hereda el bloqueo por clave temporal.
   app.use('/api/auth', recoveryRouter(config.mail ?? env.mail, recovery));
-  app.use(attachSession(config));
-  app.use(enforcePasswordChange);
+  app.use('/api', attachSession(config), enforcePasswordChange);
   app.use('/api/auth', authRouter(config));
   app.use(
     '/api/users',
@@ -49,7 +55,11 @@ export function createApp(
     }),
   );
   app.use('/api/categories', categoriesRouter);
-  app.use('/api/tickets', ticketsRouter());
+  app.use('/api/tickets', ticketsRouter(support));
+  app.use('/api/notifications', notificationsRouter);
+  app.use('/api/reports', reportsRouter);
+  app.use('/api', notFound);
+  if (config.nodeEnv === 'production') serveFrontend(app);
   app.use(notFound);
   app.use(errorHandler);
   return app;

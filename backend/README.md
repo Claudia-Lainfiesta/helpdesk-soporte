@@ -6,8 +6,8 @@ Consulta [la guía de base de datos y su diagrama ER](db/README.md).
 Incluye autenticación con sesiones en el servidor. Consulta [la guía de autenticación](docs/auth.md).
 Incluye [administración de usuarios, cuentas temporales y categorías](docs/users-and-categories.md),
 con auditoría administrativa y [tickets reales](docs/tickets.md): alta propia,
-listado, búsqueda, filtros, paginación y detalle. No hay todavía asignación,
-transiciones, comentarios, adjuntos, prioridad, SLA ni reportes reales.
+listado, búsqueda, filtros, paginación y detalle. Incluye asignación, prioridad, transiciones, actividad, notas internas y contacto directo con el agente por Telegram. No hay comentarios públicos,
+adjuntos posteriores ni SLA. Los [reportes operativos](docs/reports.md) son de solo lectura para supervisor y administrador: métricas por evento, distribuciones, tendencia y carga actual por agente. Al crear admite una imagen JPEG/PNG/WebP de hasta 10 MiB, guardada en PostgreSQL.
 
 ## Desarrollo local en Fedora con Podman
 
@@ -41,9 +41,9 @@ npm run dev
 
 En otra terminal, desde la raíz: `cd frontend` y `npm start`.
 API: http://localhost:3000. Frontend permitido: http://localhost:4200.
-La API escucha solo en `127.0.0.1`; CORS permite credenciales y el origen exacto
+En desarrollo la API escucha en `127.0.0.1`; CORS permite credenciales y el origen exacto
 configurado, sin comodines. Las peticiones POST/PUT/PATCH/DELETE requieren ese
-`Origin` (o un `Referer` del mismo origen si falta) y `Content-Type: application/json`.
+`Origin` (o un `Referer` del mismo origen si falta). Se exige JSON salvo multipart en POST /api/tickets para su imagen inicial.
 
 Si falta el proveedor de Compose, ejecuta tú mismo:
 
@@ -65,21 +65,23 @@ Cambiar `POSTGRES_*` en `.env` no cambia las credenciales de un volumen ya inici
 
 ## Variables
 
-| Variable                    | Uso                                            | Valor predeterminado    |
-| --------------------------- | ---------------------------------------------- | ----------------------- |
-| `PORT`                      | Puerto HTTP entre 1 y 65535                    | `3000`                  |
-| `FRONTEND_ORIGIN`           | Origen HTTP(S) exacto, sin ruta ni barra final | `http://localhost:4200` |
-| `DATABASE_URL`              | Conexión PostgreSQL completa                   | Obligatoria             |
-| `POSTGRES_USER`             | Usuario de PostgreSQL                          | Obligatoria             |
-| `POSTGRES_PASSWORD`         | Contraseña de PostgreSQL                       | Obligatoria             |
-| `POSTGRES_DB`               | Base de datos                                  | `helpdesk`              |
-| `NODE_ENV`                  | `development`, `test` o `production`           | `development`           |
-| `TEMP_ACCOUNT_DEFAULT_DAYS` | Duración predeterminada de cuentas temporales  | `7`                     |
-| `TEMP_ACCOUNT_MAX_DAYS`     | Máximo desde la creación de la cuenta temporal | `30`                    |
+| Variable                    | Uso                                              | Valor predeterminado        |
+| --------------------------- | ------------------------------------------------ | --------------------------- |
+| `PORT`                      | Puerto HTTP entre 1 y 65535                      | `3000`                      |
+| `FRONTEND_ORIGIN`           | Origen HTTP(S) exacto, sin ruta ni barra final   | `http://localhost:4200`     |
+| `DATABASE_URL`              | Conexión PostgreSQL completa                     | Obligatoria                 |
+| `POSTGRES_USER`             | Usuario de Compose local, no usado por la API    | Solo desarrollo             |
+| `POSTGRES_PASSWORD`         | Contraseña de Compose local, no usada por la API | Solo desarrollo             |
+| `POSTGRES_DB`               | Base de Compose local                            | `helpdesk`; solo desarrollo |
+| `NODE_ENV`                  | `development`, `test` o `production`             | `development`               |
+| `TEMP_ACCOUNT_DEFAULT_DAYS` | Duración predeterminada de cuentas temporales    | `7`                         |
+| `TEMP_ACCOUNT_MAX_DAYS`     | Máximo desde la creación de la cuenta temporal   | `30`                        |
 
 La aplicación valida estas variables al arrancar y falla con un mensaje claro
-si faltan datos o los valores son inválidos. `.env` se busca junto al
-`package.json` del backend, incluso al ejecutar el servidor desde otra carpeta.
+si faltan datos o los valores son inválidos. En desarrollo `.env` se busca junto
+al package.json del backend. Cuando NODE_ENV=production ya está definido se usan
+solo las variables del proceso (o un --env-file explícito de Node); FRONTEND_ORIGIN
+es obligatorio y HTTPS. POSTGRES_* se valida en Compose, no en la aplicación.
 
 ## Scripts
 
@@ -89,6 +91,7 @@ si faltan datos o los valores son inválidos. `.env` se busca junto al
 | `npm run typecheck`           | Validación TypeScript sin emitir archivos                 |
 | `npm run build`               | Compilar a `dist/`                                        |
 | `npm start`                   | Ejecutar `dist/server.js` después de compilar             |
+| `npm run db:check`            | Comprobar conexión PostgreSQL sin modificar datos         |
 | `npm run db:up`               | Crear/iniciar PostgreSQL y esperar al healthcheck         |
 | `npm run db:down`             | Detener todos los servicios Compose conservando volúmenes |
 | `npm run db:logs`             | Seguir los registros de PostgreSQL                        |
@@ -110,7 +113,7 @@ si faltan datos o los valores son inválidos. `.env` se busca junto al
 | `npm run check`               | Lint, formato, tipos, pruebas y build en orden            |
 
 `SIGINT` y `SIGTERM` cierran el servidor HTTP y el pool de conexiones.
-En producción, ejecuta con `NODE_ENV=production npm start` detrás de HTTPS para
+En producción, utiliza el [build y start de la raíz](../docs/deployment-render-supabase.md) para
 usar la cookie `__Host-hd_session` con `Secure`. Los errores siempre omiten
 stack traces y usan `{ error: { code, message } }`.
 
@@ -157,34 +160,42 @@ Consulta la [guía de contribución](../Documentacion/Guia-de-contribucion.md).
 ## Endpoints implementados
 
 El prefijo es `/api`. Todos los errores usan `{ error: { code, message } }`.
-Las escrituras exigen JSON y origen permitido, incluso cuando son públicas.
+Las escrituras exigen origen permitido, incluso cuando son públicas. Usan JSON, excepto POST /api/tickets que también admite multipart para la imagen inicial.
 Las rutas protegidas exigen una cuenta activa, no vencida y una sesión válida.
 Si la contraseña es temporal solo se permiten me, logout y change-password,
 además de las rutas públicas de salud y recuperación.
 
-| Método | Ruta                            | Acceso                             | Propósito y resultado                                                                           |
-| ------ | ------------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------- |
-| GET    | `/api/health`                   | Público                            | 200 con status, service y time; no consulta PostgreSQL                                          |
-| GET    | `/api/health/db`                | Público                            | SELECT 1; 200 o 503 DATABASE_UNAVAILABLE                                                        |
-| POST   | `/api/auth/login`               | Público                            | `{ email, password }`; perfil 200 y cookie HttpOnly, o 401 genérico/429                         |
-| POST   | `/api/auth/logout`              | Sin exigir sesión                  | `{}`; revoca la actual, borra cookie, 204 idempotente                                           |
-| GET    | `/api/auth/me`                  | Sesión; admite contraseña temporal | Perfil 200 o 401                                                                                |
-| POST   | `/api/auth/change-password`     | Sesión; admite contraseña temporal | `{ currentPassword, newPassword }`; perfil 200, conserva sesión actual                          |
-| POST   | `/api/auth/recovery-request`    | Público                            | `{ email }`; 202 genérico; aviso elegible al administrador                                      |
-| GET    | `/api/users`                    | Administrador                      | `page,pageSize,q,role,active,temporary,expired`; página de cuentas                              |
-| GET    | `/api/users/:id`                | Administrador                      | Cuenta 200 o 404 USER_NOT_FOUND                                                                 |
-| POST   | `/api/users`                    | Administrador                      | Alta con nombre/correo/rol y temporalidad/notas opcionales; 201 y contraseña temporal una vez   |
-| PATCH  | `/api/users/:id`                | Administrador                      | Nombre, rol, vencimiento y notas; cuenta 200; correo inmutable                                  |
-| POST   | `/api/users/:id/deactivate`     | Administrador                      | `{}`; desactiva y revoca sesiones; cuenta 200                                                   |
-| POST   | `/api/users/:id/reactivate`     | Administrador                      | `{}`; reactiva sin renovar vencimiento; cuenta 200                                              |
-| POST   | `/api/users/:id/reset-password` | Administrador                      | `{}`; revoca sesiones, limpia bloqueo, exige cambio; contraseña temporal una vez                |
-| POST   | `/api/users/:id/unlock`         | Administrador                      | `{}`; limpia fallos y bloqueo, conserva contraseña y sesiones                                   |
-| GET    | `/api/categories`               | Sesión                             | `{ data }`; activas; includeInactive=true solo administrador                                    |
-| POST   | `/api/categories`               | Administrador                      | `{ name, description?, isActive? }`; categoría 201                                              |
-| PATCH  | `/api/categories/:id`           | Administrador                      | Campos de categoría modificados; 200; sin borrado                                               |
-| POST   | `/api/tickets`                  | Sesión                             | `{ subject, description, categoryId }`; 201 y ticket completo, siempre propio/creado/sin agente |
-| GET    | `/api/tickets`                  | Sesión                             | `page,pageSize,search,status,categoryId`; página según permisos                                 |
-| GET    | `/api/tickets/:id`              | Sesión                             | Ticket completo; 404 también para un ticket ajeno al solicitante                                |
+| Método | Ruta                                | Acceso                                                   | Propósito y resultado                                                                                                     |
+| ------ | ----------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/health`                       | Público                                                  | 200 con status, service y time; no consulta PostgreSQL                                                                    |
+| GET    | `/api/health/db`                    | Público                                                  | SELECT 1; 200 o 503 DATABASE_UNAVAILABLE                                                                                  |
+| POST   | `/api/auth/login`                   | Público                                                  | `{ email, password }`; perfil 200 y cookie HttpOnly, o 401 genérico/429                                                   |
+| POST   | `/api/auth/logout`                  | Sin exigir sesión                                        | `{}`; revoca la actual, borra cookie, 204 idempotente                                                                     |
+| GET    | `/api/auth/me`                      | Sesión; admite contraseña temporal                       | Perfil 200 o 401                                                                                                          |
+| POST   | `/api/auth/change-password`         | Sesión; admite contraseña temporal                       | `{ currentPassword, newPassword }`; perfil 200, conserva sesión actual                                                    |
+| POST   | `/api/auth/recovery-request`        | Público                                                  | `{ email }`; 202 genérico; aviso elegible al administrador                                                                |
+| GET    | `/api/users`                        | Administrador                                            | `page,pageSize,q,role,active,temporary,expired`; página de cuentas                                                        |
+| GET    | `/api/users/:id`                    | Administrador                                            | Cuenta 200 o 404 USER_NOT_FOUND                                                                                           |
+| POST   | `/api/users`                        | Administrador                                            | Alta con nombre/correo/rol y temporalidad/notas opcionales; 201 y contraseña temporal una vez                             |
+| PATCH  | `/api/users/:id`                    | Administrador                                            | Nombre, rol, vencimiento, notas y telegramUsername; cuenta 200; correo inmutable                                          |
+| POST   | `/api/users/:id/deactivate`         | Administrador                                            | `{}`; desactiva y revoca sesiones; cuenta 200                                                                             |
+| POST   | `/api/users/:id/reactivate`         | Administrador                                            | `{}`; reactiva sin renovar vencimiento; cuenta 200                                                                        |
+| POST   | `/api/users/:id/reset-password`     | Administrador                                            | `{}`; revoca sesiones, limpia bloqueo, exige cambio; contraseña temporal una vez                                          |
+| POST   | `/api/users/:id/unlock`             | Administrador                                            | `{}`; limpia fallos y bloqueo, conserva contraseña y sesiones                                                             |
+| GET    | `/api/categories`                   | Sesión                                                   | `{ data }`; activas; includeInactive=true solo administrador                                                              |
+| POST   | `/api/categories`                   | Administrador                                            | `{ name, description?, isActive? }`; categoría 201                                                                        |
+| PATCH  | `/api/categories/:id`               | Administrador                                            | Campos de categoría modificados; 200; sin borrado                                                                         |
+| POST   | `/api/tickets`                      | Sesión                                                   | `{ subject, description, categoryId }`; 201 y ticket completo, siempre propio/creado/sin agente                           |
+| GET    | `/api/tickets`                      | Sesión                                                   | `page,pageSize,search,status,categoryId,priority`; página según permisos                                                  |
+| GET    | `/api/tickets/:id`                  | Sesión                                                   | Ticket completo; 404 también para un ticket ajeno al solicitante                                                          |
+| GET    | `/api/tickets/:id/attachment`       | Igual que detalle                                        | Bytes originales inline JPEG/PNG/WebP, nosniff; 404 si no hay imagen                                                      |
+| GET    | `/api/tickets/assignable-agents`    | Supervisor o administrador                               | Agentes activos y no vencidos; solo id/nombre/correo                                                                      |
+| PATCH  | `/api/tickets/:id/assignment`       | Agente a sí mismo; supervisor/administrador              | `{ agentId }` o null; ticket 200                                                                                          |
+| POST   | `/api/tickets/:id/transitions`      | Según acción, propiedad y asignación                     | `{ action }`; ticket 200; nueve transiciones                                                                              |
+| GET    | `/api/tickets/:id/events`           | Igual que detalle                                        | `page,pageSize`; actividad paginada; notas solo para soporte autorizado                                                   |
+| PATCH  | `/api/tickets/:id/priority`         | Agente asignado, supervisor o administrador; no terminal | `{ priority }`; ticket 200, evento, auditoría y avisos de Urgente                                                         |
+| POST   | `/api/tickets/:id/notes`            | Agente asignado, supervisor o administrador; no terminal | `{ body }`; nota 201, evento y auditoría atómicos                                                                         |
+| GET    | `/api/tickets/:id/telegram-contact` | Solo propietario; no terminal y distinto del agente      | URL pública del agente con mensaje prellenado (sin envío automático) o aviso de indisponibilidad; sin efecto en el ticket |
 
 La [matriz de permisos](../Documentacion/README.md#permisos-implementados)
 refleja el núcleo actual. Los errores comunes son 400 INVALID_INPUT/INVALID_JSON,
@@ -192,8 +203,9 @@ refleja el núcleo actual. Los errores comunes son 400 INVALID_INPUT/INVALID_JSO
 PASSWORD_CHANGE_REQUIRED y 415 JSON_REQUIRED. Los códigos específicos, límites,
 cuerpos y ejemplos están en [auth](docs/auth.md), [usuarios/categorías](docs/users-and-categories.md),
 [recuperación](docs/email-and-recovery.md) y [tickets](docs/tickets.md).
-No hay endpoints de asignación, transiciones, comentarios, archivos, SLA o
-reportes. Telegram solo tiene scripts de POC, sin webhook ni endpoint HTTP.
+Consulta también los [ocho endpoints GET de reportes](docs/reports.md), exclusivos de supervisor y administrador.
+No hay endpoints de comentarios públicos, archivos genéricos ni SLA. El contacto directo
+por Telegram no requiere bot ni webhook. No hay relevo de conversaciones ni polling del bot.
 
 ## Comprobaciones
 
@@ -236,91 +248,81 @@ predeterminados. `SMTP_USER` y `SMTP_PASSWORD` quedan vacíos para Mailpit.
 comprobando solo PostgreSQL; `db:down` detiene todos los servicios del compose.
 El aviso se ejecuta como tarea best effort sin cola persistente ni reintentos.
 
-## Telegram (desarrollo)
+## Telegram: contacto desde tickets
 
-Prueba de concepto S0-06 con grammY, long polling y sesiones en memoria. La API
-no inicia el bot y sigue funcionando sin `TELEGRAM_BOT_TOKEN`. Los scripts del
-bot tampoco necesitan PostgreSQL: no importan la configuración ni el pool de la API.
+El propietario de un ticket activo puede abrir el Telegram del agente asignado.
+El administrador configura el @usuario público en el formulario de Usuarios
+(`telegramUsername` en POST/PATCH /api/users); se comprueba con el empleado.
+No se usa un ID numérico, no hay vinculación por bot y no se inicia su proceso.
+Las notas internas posteriores solo las ve soporte autorizado, mediante Actividad.
+Consulta [tickets: permisos y contratos](docs/tickets.md#contacto-directo-por-telegram).
 
-1. Abre [@BotFather](https://t.me/BotFather) y usa `/newbot`. Elige el nombre y
-   el username de tu bot de pruebas siguiendo sus indicaciones.
-2. Guarda la credencial que te entregue **solo en tu `.env` local**, en
-   `TELEGRAM_BOT_TOKEN`. No la compartas, la agregues a Git ni la pegues en logs.
-   `.env.example` mantiene el valor vacío.
-3. Cada integrante del equipo usa **su propio bot**. Un token solo debe tener
-   un proceso de polling activo. Las dos cuentas de una prueba conversan con
-   el mismo bot, atendido por ese único proceso.
+## Telegram: avisos generales al grupo
 
-Desde `backend/`:
-
-```bash
-npm run telegram:check
-npm run telegram:dev
-```
-
-`telegram:check` consulta `getMe` y muestra el username, el ID del bot y un
-resumen del webhook. Omite la URL y el detalle de errores del webhook porque
-pueden contener datos privados. Si hay un webhook activo, puedes quitarlo
-explícitamente antes de iniciar el polling:
-
-```bash
-npm run telegram:check -- --delete-webhook
-```
-
-El flag conserva las actualizaciones pendientes; no se elimina el webhook al
-arrancar el bot. Un error 409 explica que puede existir otro proceso de polling
-o un webhook activo. Detén la otra instancia con Ctrl+C antes de reiniciar.
-
-`TELEGRAM_ALLOWED_USER_IDS` acepta IDs positivos separados por comas. Vacío
-permite a cualquier persona en un chat privado. Para obtener los IDs, deja
-inicialmente la lista vacía, abre tu bot desde cada cuenta y envía `/miid`.
-Después configura ambos IDs y reinicia. Una persona fuera de la lista se
-ignora por completo, incluso si envía `/miid`.
-
-### Guion manual con dos cuentas
-
-1. Cada cuenta abre el mismo bot y envía `/start`.
-2. La primera envía `/ticket TK-000001 solicitante`.
-3. Antes de unir la segunda, envía un mensaje desde la primera: debe avisar
-   que falta el otro lado. Ese mensaje no se entrega después ni se pone en cola.
-4. La segunda envía `/ticket TK-000001 agente`.
-5. Intercambia mensajes en ambos sentidos, luego fotos, documentos y voz.
-   Al cambiar quien habla aparece una etiqueta con rol y referencia; varios
-   mensajes consecutivos del mismo emisor no repiten la etiqueta.
-6. Usa `/estado` en ambos chats. Desde la segunda cuenta, usa `/salir` y
-   confirma que la primera vuelve a ver que falta el otro lado. La segunda
-   puede volver a ocupar el rol con `/ticket`.
-7. Para probar un fallo de entrega, bloquea el bot desde una cuenta e intenta
-   escribir desde la otra. Debe avisar que no pudo confirmar la entrega y
-   seguir atendiendo comandos. Desbloquea y envía `/start` para continuar.
-
-Todas las referencias deben tener `TK-` y al menos seis dígitos. La POC no
-verifica su existencia en la base ni crea tickets. El rol elegido aquí solo
-empareja chats; no asigna responsables reales. Las sesiones se pierden al
-reiniciar, incluida una recarga de `tsx watch`.
-
-El texto plano y los archivos enviados aquí son conversación para el otro
-participante, **no notas internas**. La POC no consume notas del HelpDesk y no
-reenvía comandos, incluido un `/nota` desconocido.
-
-Los envíos no se reintentan. Si falla una copia o su etiqueta, se avisa al emisor;
-si también falla ese aviso, queda un resultado fallido con IDs en el log. Una
-etiqueta ya enviada puede quedar sin su copia. Ante un error de red no siempre
-se puede saber si Telegram alcanzó a entregar el mensaje: el aviso indica que
-no se confirmó la entrega. Un fallo del polling detiene el proceso con error;
-se reinicia manualmente. No hay cola persistente ni cambios de estado del ticket.
-
-Los logs de Telegram solo incluyen IDs, tipo de actualización, resultado y
-código de error, sin textos, archivos, credenciales ni errores originales.
-Las pruebas automáticas usan pasarelas falsas y no necesitan token ni red de
-Telegram: `npm run check`. La integración PostgreSQL previa conserva su skip
-habitual si no está exportada `DATABASE_URL`.
-
-Consulta los [hallazgos técnicos para EP-06](../Documentacion/Telegram-prueba-de-concepto.md).
+El bot de grupo solo envía avisos de creación, asignación, reasignación y cambio
+a Urgente mediante `fetch` después del commit. No recibe mensajes ni requiere un
+proceso adicional. Configuración y privacidad en [notificaciones](docs/notifications.md).
+El contacto directo del propietario con el agente es independiente del bot.
 
 ## Tickets
 
 Consulta [la API de tickets](docs/tickets.md): crear, listar con búsqueda/filtros y
 abrir detalle. Los números TK- son generados por PostgreSQL. El solicitante solo
-consulta sus tickets; los demás roles ven todos. No incluye asignación ni
-cambios de estado.
+consulta sus tickets; los demás roles ven todos. Incluye asignación, prioridad, transiciones, actividad, notas internas y contacto directo por Telegram; no incluye comentarios públicos, adjuntos posteriores ni SLA. La imagen opcional inicial se guarda en BYTEA.
+
+La prioridad operativa (Baja, Media, Alta, Urgente) se muestra en listado/detalle y
+se filtra con priority. Nace Media. La cambia el agente asignado, supervisor o
+administrador en tickets no terminales, incluido Resuelto. El propietario no gana
+ese permiso. No hay cálculo, escalamiento ni SLA. El cambio a Urgente genera avisos según la guía de notificaciones.
+Consulta la guía de tickets para el contrato y los controles disponibles.
+
+La imagen inicial es opcional, máximo una y **10 MiB (10485760 bytes)**. El backend
+comprueba firma real, MIME y extensión; no usa filesystem, Base64 ni almacenamiento
+externo. El ticket y su imagen son atómicos. No hay subida, reemplazo o eliminación
+posteriores. Consulta [el contrato y los ejemplos](docs/tickets.md#imagen-inicial-del-ticket).
+Hablar por Telegram prepara solo saludo, número y asunto; el propietario decide
+si envía el mensaje. HelpDesk no almacena ni sincroniza conversaciones.
+
+## Notificaciones
+
+[Notificaciones personales y avisos al grupo](docs/notifications.md): cuatro endpoints
+privados, ocho tipos web y envío Telegram posterior al commit para creación,
+asignación/reasignación y Urgente. Las migraciones 0018 y 0019 se aplican con `npm run db:migrate`.
+Configura opcionalmente `TELEGRAM_BOT_TOKEN` y `TELEGRAM_SUPPORT_CHAT_ID` (grupo negativo)
+en tu `.env` privado y reinicia la API. Si falta alguno no se envía nada ni falla
+el arranque. No requiere un runner, polling ni webhook.
+
+El contacto «Hablar por Telegram» continúa abriendo el deep-link personal del
+agente; el bot de grupo es un canal distinto, sin lectura ni seguimiento.
+
+## Exportación y cierre v1
+
+[Reportes CSV](docs/reports.md#exportación-csv) permite a supervisor/administrador
+exportar los tickets creados en el rango aplicado, con categoría/agente actuales.
+Incluye trece columnas operativas, fechas UTC y protección contra fórmulas; no
+exporta descripciones, correos, notas, Telegram ni imágenes.
+
+El [estado final y la matriz de permisos](../docs/project-status.md) describen
+el alcance local, las verificaciones y las limitaciones actuales.
+
+## Render + Supabase PostgreSQL
+
+[Guía de despliegue y pasos concretos](../docs/deployment-render-supabase.md).
+La raíz incorpora npm run build:production y npm run start:production. En producción
+Express sirve Angular desde frontend/dist/HelpDesk/browser después de la API,
+escucha 0.0.0.0 y PORT, y exige FRONTEND_ORIGIN HTTPS. Render usa TRUST_PROXY=1;
+las cookies conservan HttpOnly, Secure y SameSite=Lax, con Origin/CSRF estricto.
+
+DATABASE_URL basta para PostgreSQL; POSTGRES_* solo configura Compose local.
+Producción exige TLS con CA/hostname verificados; usar Session Pooler de Supabase.
+`sslrootcert` en la URI permite una CA del proveedor si es necesaria. No desactivar
+validación TLS. No se introduce Supabase SDK/Auth/Storage ni se usa su Data API.
+
+`npm run db:check` comprueba conexión sin modificar datos. Migración/status/admin
+siguen siendo operaciones explícitas; el start no los ejecuta. No cargar seed de
+desarrollo en Supabase. El administrador inicial se crea con la herramienta de
+entrada oculta existente, sin datos de prueba ni contraseñas en argumentos.
+
+SMTP ya permite Brevo en 2525 con SMTP_SECURE=false y SMTP_REQUIRE_TLS=true;
+MAIL_FROM debe ser remitente verificado y RECOVERY_ADMIN_EMAIL configura el correo
+administrativo real sin incrustarlo en código. Telegram conserva sus dos usos.
